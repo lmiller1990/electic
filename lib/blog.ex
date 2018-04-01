@@ -1,25 +1,36 @@
 defmodule Blog do
-  def start() do
-    read_file("posts/tester.md")
-    |> parse  
-    |> write_to_html("testerr")
+  def start(file) do
+    read_file(file)
+    |> get_output_file_name
+    |> parse_content  
+    |> write_to_html
   end
 
-  def parse(file) do
-    case Earmark.as_html(file) do
-      {:ok, html_doc, []} -> html_doc 
+  def get_output_file_name(%Blog.Post{filename: filename} = post) do
+    name = 
+      String.split(filename, "/")
+      |> List.last
+      |> String.split(".")
+      |> List.first
+
+    %{post | name: name}
+  end
+
+  def parse_content(%Blog.Post{raw_text: raw_text} = post) do
+    case Earmark.as_html(raw_text) do
+      {:ok, html_doc, []} -> %{post | content: html_doc}
       {:error, _, errs} -> errs
     end
   end
 
   def read_file(filename) do
     case File.read(filename) do
-      {:ok, file} -> file 
+      {:ok, raw_text} -> %Blog.Post{raw_text: raw_text, filename: filename}
       {:error, err} -> err
     end
   end
 
-  def write_to_html(html, filename) do
-    File.write("docs/posts/#{filename}.html", html)
+  def write_to_html(%Blog.Post{content: content, name: name} = _post) do
+    File.write("docs/posts/#{name}.html", content)
   end
 end
