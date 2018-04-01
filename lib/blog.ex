@@ -18,7 +18,7 @@ defmodule Blog do
 
   def parse_content(%Blog.Post{raw_text: raw_text} = post) do
     case Earmark.as_html(raw_text) do
-      {:ok, html_doc, []} -> %{post | content: html_doc}
+      {:ok, html_doc, []} -> %{post | content: html_doc |> String.trim }
       {:error, _, errs} -> errs
     end
   end
