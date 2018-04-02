@@ -1,7 +1,20 @@
 defmodule Blog.Generators do
   def index() do
     {:ok, files} = Blog.Files.get_all_posts(false)
-    files 
+    
+    create_links_to_each_file(files)
+    |> Enum.join("<br>")
+    |> write_to_index
+  end
+
+  def write_to_index(content) do
+    File.write("docs/index.html", content)
+  end
+
+  def create_links_to_each_file(files) do
+    for file <- files do
+      create_link(file)
+    end
   end
 
   def create_link(filename) do
@@ -15,7 +28,7 @@ defmodule Blog.Generators do
       String.replace(filename, "md", "html")
       |> String.downcase
 
-    "<a href=\"#{href}\">#{pretty_name}</a>"
+    "<a href=\"posts/#{href}\">#{pretty_name}</a>"
   end
 
   def prettify_post_name(filename) do

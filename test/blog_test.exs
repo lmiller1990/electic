@@ -30,13 +30,13 @@ defmodule BlogTest do
 
     href = Blog.Generators.create_link(filename)
 
-    assert href == "<a href=\"testing_in_elixir.html\">Testing in Elixir</a>"
+    assert href == "<a href=\"posts/testing_in_elixir.html\">Testing in Elixir</a>"
   end
 
   test "creates href" do
     href = Blog.Generators.create_href("Testing in Elixir", "testing_in_elixir.md")
 
-    assert href == "<a href=\"testing_in_elixir.html\">Testing in Elixir</a>"
+    assert href == "<a href=\"posts/testing_in_elixir.html\">Testing in Elixir</a>"
 
   end
 end
