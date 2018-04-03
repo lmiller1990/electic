@@ -1,0 +1,2 @@
+defmodule Electic do
+end
