@@ -1,14 +1,18 @@
 defmodule Blog.Generators do
-  def index() do
+  def generate_index() do
     {:ok, files} = Blog.Files.get_all_posts(false)
     
     create_links_to_each_file(files)
-    |> Enum.join("<br>")
+    |> insert_into_template
     |> write_to_index
   end
 
-  def write_to_index(content) do
-    File.write("docs/index.html", content)
+  def insert_into_template(links) do
+    EEx.eval_file("templates/index.html.eex", [links: links])
+  end
+
+  def write_to_index(html) do
+    File.write("docs/index.html", html)
   end
 
   def create_links_to_each_file(files) do

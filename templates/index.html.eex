@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title></title>
+</head>
+<link rel="stylesheet" src="index.css">
+<body>
+  <h3>Posts</h3>
+  <%= for link <- links do %>
+    <%= link %>
+  <% end %>
+</body>
+</html>
