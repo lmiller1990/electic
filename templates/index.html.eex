@@ -7,8 +7,9 @@
 <link rel="stylesheet" src="index.css">
 <body>
   <h3>Posts</h3>
-  <%= for link <- links do %>
-    <%= link %>
+  <%= for post <- posts do %>
+    <a href="<%= post.link %>">
+      <%= post.title%>
   <% end %>
 </body>
 </html>

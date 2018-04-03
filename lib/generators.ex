@@ -1,26 +1,41 @@
 defmodule Blog.Generators do
   def generate_index() do
-    {:ok, files} = Blog.Files.get_all_posts(false)
+    {:ok, files} = File.ls("posts")
 
-    create_links_to_each_file(files)
-    |> insert_into_template
-    |> write_to_index
+    posts = for file <- files do
+      %Blog.Post{link: generate_link(file), title: filepath_to_pretty_name(file)}
+    end
+
+    html = EEx.eval_file("templates/index.html.eex", [posts: posts])
+
+    File.write("docs/index.html", html)
   end
 
   def generate_post_html(filepath) do
     {:ok, markup} = File.read(filepath)
     html = parse_content(markup)
-
-    write_to_file(filepath, html)
+    write_post_to_path(filepath, html)
   end
 
-  def write_to_file(filepath, content) do
-    name = String.split(filepath, "/") |> List.last |> prettify_post_name
-    html = EEx.eval_file("templates/show.html.eex", [title: name, body: content])
+  def generate_link(link) do
+    String.replace(link, "md", "html")
+    |> String.downcase
+    |> String.replace_prefix("", "posts/")
+  end
 
-    path = String.replace(name, " ", "_")
+  def write_post_to_path(filepath, content) do
+    title = filepath_to_pretty_name(filepath)
+    html = EEx.eval_file("templates/show.html.eex", [title: title, body: content])
+
+    path = String.replace(title, " ", "_") |> String.downcase
 
     File.write("docs/posts/#{path}.html", html)
+  end
+
+  def filepath_to_pretty_name(filepath) do
+    String.split(filepath, "/") 
+    |> List.last 
+    |> prettify_post_name
   end
 
   def parse_content(markup) do
@@ -30,37 +45,8 @@ defmodule Blog.Generators do
     end
   end
 
-
-  def insert_into_template(links) do
-    EEx.eval_file("templates/index.html.eex", [links: links])
-  end
-
-  def write_to_index(html) do
-    File.write("docs/index.html", html)
-  end
-
-  def create_links_to_each_file(files) do
-    for file <- files do
-      create_link(file)
-    end
-  end
-
-  def create_link(filename) do
-    filename
-    |> prettify_post_name
-    |> create_href(filename)
-  end
-
-  def create_href(pretty_name, filename) do
-    href = 
-      String.replace(filename, "md", "html")
-      |> String.downcase
-
-    "<a href=\"posts/#{href}\">#{pretty_name}</a>"
-  end
-
-  def prettify_post_name(filename) do
-    String.split(filename, ".")
+  def prettify_post_name(filepath) do
+    String.split(filepath, ".")
     |> List.first
     |> String.replace("_", " ")
   end
