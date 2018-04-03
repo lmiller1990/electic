@@ -1,7 +1,20 @@
 defmodule Electic.Utils do
+  @mock Application.get_env(:electic, :mock)
+
   @moduledoc """
   Some utils for extracing information from filepaths.
   """
+
+  @doc """
+  Loads a mock.
+
+  ## Examples
+      iex> Electic.Utils.mock()
+      "mock"
+  """
+  def mock() do
+    @mock
+  end
 
   @doc """
   Parses a filepath to a nicely formatted string.

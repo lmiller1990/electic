@@ -1,9 +1,9 @@
-defmodule Blog.MixProject do
+defmodule Electic.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :blog,
+      app: :electic,
       version: "0.1.0",
       elixir: "~> 1.6",
       start_permanent: Mix.env() == :prod,

@@ -18,7 +18,7 @@ defmodule Electic.Generators do
 
   def generate_post_html(filepath) do
     {:ok, markup} = File.read(filepath)
-    html = parse_content(markup)
+    html = parse_markup_to_html(markup)
     write_post_to_path(filepath, html)
   end
 
@@ -31,7 +31,7 @@ defmodule Electic.Generators do
     File.write("docs/posts/#{path}.html", html)
   end
 
-  def parse_content(markup) do
+  def parse_markup_to_html(markup) do
     case Earmark.as_html(markup) do
       {:ok, html_doc, []} -> html_doc
       {:error, _, errs} -> errs
