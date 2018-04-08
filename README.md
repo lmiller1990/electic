@@ -10,17 +10,17 @@ Templates in the `/templates` folder. There are currently two:
 ### API
 Generators:
 
-`Blog.Generators.generate_post_html/1`
+`Electic.Generators.generate_post_html/1`
 
 Takes a filepath as an argument. Example:
 
 ```ex
-Blog.Generators.generate_post_html("posts/Mocking_the_filesystem_in_Elixir.md")
+Electic.Generators.generate_post_html("posts/Mocking_the_filesystem_in_Elixir.md")
 ```
 
 Which outputs in `docs/posts`.
 
-`Blog.Generators.generate_index/0`  
+`Electic.Generators.generate_index/0`  
 
 Generates `index.html`, a list of all the posts in `docs/posts`. At the moment each post has to be generated manually using `Blog.Generators.generate_post_html/1`.
 
