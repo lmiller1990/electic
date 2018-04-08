@@ -16,6 +16,11 @@ body {
   align-items: center;
 }
 
-img, h1, h2, h3, p, pre {
+li, ol, ul, h1, h2, h3, p, pre {
   width: 100%;
 }
+
+img {
+  max-width: 100%;
+}
+
