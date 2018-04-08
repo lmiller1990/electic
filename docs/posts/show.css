@@ -1,4 +1,5 @@
 body {
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -39,7 +39,7 @@ defmodule Electic.Generators do
   end
 
   def parse_markup_to_html(markup) do
-    case Earmark.as_html(markup) do
+    case Earmark.as_html(markup, %Earmark.Options{code_class_prefix: "lang- language-"}) do
       {:ok, html_doc, []} -> html_doc
       {:error, _, errs} -> errs
     end

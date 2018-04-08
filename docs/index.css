@@ -4,3 +4,7 @@ h3 {
 a {
   display: block;
 }
+
+* {
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+}
