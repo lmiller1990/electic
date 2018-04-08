@@ -16,6 +16,13 @@ defmodule Electic.Generators do
     File.write("docs/index.html", html)
   end
 
+  def generate_all_posts_html() do
+    {:ok, files} = File.ls("posts")
+    for file <- files do
+      generate_post_html("posts/#{file}")
+    end
+  end
+
   def generate_post_html(filepath) do
     {:ok, markup} = File.read(filepath)
     html = parse_markup_to_html(markup)
