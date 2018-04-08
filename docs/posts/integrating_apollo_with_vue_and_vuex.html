@@ -16,7 +16,7 @@
 <p>To demonstrate how to use Apollo with Vue and Vuex, we will be building the following app:</p>
 <p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/app.png" alt=""/></p>
 <p>The app shows a list of programming languages, and fetches the frameworks for each when selected. I will be building both the GraphQL backend and Vue frontend, using Apollo on both the server and client.</p>
-<p>The link to the source code for this project is <a href="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
+<p>The link to the source code for this project is <a href="https://github.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
 <h2>What is Apollo?</h2>
 <p>Apollo actual refers to a few things.</p>
 <p><strong>The Apollo Platform</strong>, or just Apollo for short: a family of technologies that you can incrementally add to your stack, including:</p>
@@ -287,8 +287,8 @@ export default {
 <pre><code class="js">console.log(this.$apollo.store)</code></pre>
 <p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/apollo_store.png" alt=""/></p>
 <p>Interesting enough, Apollo’s store and cache are <strong>reactive</strong>, much like Vue and React’s reactivity. If a query or mutation modifies some data, all other references to it will be automatically updated in the Apollo store. </p>
-<p>To connect the Apollo store to your frontend, and receive reactive updates to your UI, you can use <a href="https://raw.githubusercontent.com/apollographql/react-apollo">React Apollo</a> or <a href="https://raw.githubusercontent.com/Akryum/vue-apollo">VueApollo</a>. VueApollo programmatically defines reactive properties using Vue’s reactivity system, based on the result of ApolloClient query and mutation results. ReactApollo likely does the same thing, and actually used Redux internally until version 2. </p>
-<p>Basically, the client implementations provide some utilties to integrate Apollo’s cache/store with the UI framework’s reactivity system - a <strong>reactive, global store</strong>, sort of similar to Vuex and Redux. There is a library called <a href="https://raw.githubusercontent.com/apollographql/apollo-link-state">Apollo link state</a>, which lets you query the state, similar to what Vuex getters are used for.</p>
+<p>To connect the Apollo store to your frontend, and receive reactive updates to your UI, you can use <a href="https://github.com/apollographql/react-apollo">React Apollo</a> or <a href="https://github.com/Akryum/vue-apollo">VueApollo</a>. VueApollo programmatically defines reactive properties using Vue’s reactivity system, based on the result of ApolloClient query and mutation results. ReactApollo likely does the same thing, and actually used Redux internally until version 2. </p>
+<p>Basically, the client implementations provide some utilties to integrate Apollo’s cache/store with the UI framework’s reactivity system - a <strong>reactive, global store</strong>, sort of similar to Vuex and Redux. There is a library called <a href="https://github.com/apollographql/apollo-link-state">Apollo link state</a>, which lets you query the state, similar to what Vuex getters are used for.</p>
 <p>I still like the Flux architecture lays out, and how clean the separation of data and UI becomes, as well as how easy it is to test mutations/reducers. I also like the benefits of Apollo (optimized GraphQL queries, automatically caching). Let’s try and establish a simple pattern, that will let you integrate Apollo into your existing Vue/Vuex apps gradually, without ditching your existing Vuex store. Then I will talk about how to can use Apollo entirely, as a replacement for a global state store.</p>
 <h3>Creating the Vuex store</h3>
 <p>Create a new file for the Vuex store: <code class="inline">src/store.js</code>, and add the following:</p>
@@ -590,7 +590,7 @@ export default new VueRouter({
 <p>Basically, instead of thinking about how to structure you Vuex store, you simply let Apollo figure how out to structure the data. Then you simply write GraphQL queries (perhaps in <code class="inline">methods</code>, for example) and ask Apollo for whatever data you want.</p>
 <p>While Apollo’s store is reactive internally, because Vue does not have knowledge of the Apollo store, you cannot simply use <code class="inline">computed</code> properties to watch the Apollo store. To integrate Apollo with Vue, you can use <a href="https://raw.githubusercontent.com/Akryum/vue-apollo">VueApollo</a>. There is <a href="https://www.apollographql.com/docs/react/integrations.html">integration for most popular frameworks</a>.</p>
 <p>Now I have an understanding of how Apollo works, I would like to try out VueApollo soon. The idea of leaving the store to Apollo and simply querying for the data I want is appealing. I think that approach might be great for new applications, but if you want to slowly integrate Apollo to an existing app that is using Vuex, perhaps the way presented in this article is a good way to get started. It allows since you to take advantage of Apollo’s caching, and move from an existing (probably REST) API to a GraphQL API without changing you application’s structure significantly.</p>
-<p>The link to the source code for this project is <a href="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
+<p>The link to the source code for this project is <a href="https://github.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
 
   </div>
 </body>
