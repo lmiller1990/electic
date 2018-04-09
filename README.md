@@ -24,11 +24,19 @@ Which outputs in `docs/posts`.
 
 Generates `index.html`, a list of all the posts in `docs/posts`. At the moment each post has to be generated manually using `Blog.Generators.generate_post_html/1`.
 
+`Electic.Generators.generate_all_posts_html/0`  
+
+Generates html for all posts in `/posts`.
+
 Then simply push to Github and enable `docs` as the homepage.
+
+### Styles
+
+Simply add to the relevant `.css` file in `/docs`.
 
 ### Todo:
 
-- tests
+- more tests
 - better templates
   - about.html
   - contact.html
