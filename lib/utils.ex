@@ -17,6 +17,11 @@ defmodule Electic.Utils do
     end
   end
 
+  def delete_all_existing_content() do
+    delete_all_html_files()
+    delete_all_posts()
+  end
+
   def delete_all_html_files() do
     {:ok, files} = File.ls("docs/posts")
 
