@@ -6,6 +6,33 @@ defmodule Electic.Utils do
   """
 
   @doc """
+  Delete all existing posts.
+
+  """
+  def delete_all_posts() do
+    {:ok, files} = File.ls("posts")
+
+    for file <- files do
+      delete_file("posts/#{file}")
+    end
+  end
+
+  def delete_all_html_files() do
+    {:ok, files} = File.ls("docs/posts")
+
+    for file <- files do
+      delete_file("docs/posts/#{file}")
+    end
+
+    delete_file("docs/index.html")
+    delete_file("docs/index.css")
+  end
+
+  def delete_file(path) do
+    File.rm(path)
+  end
+
+  @doc """
   Loads a mock.
 
   ## Examples
