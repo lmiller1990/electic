@@ -22,4 +22,31 @@ const vsSource = `
 `
 ```
 
-First we define the 
+The first line has a bunch of new information:
+
+```js
+attribute vec4 aVertexPosition;
+```
+
+An __attribute__ is used to communicate 'outside' of a vertex shader, kind of like a JavaScript global variable. Only the vertex andouter JavaScript code can access an attribute - a fragment shader cannot. `vec4` is a type - a vector with four points. For example:
+
+```gl
+new vec4(1.0, 2.0, 3.0, 1.0);
+```
+
+Next we have two more new concepts:
+
+```js
+uniform mat4 uModelViewMatrix;
+```
+
+Uniform is how shader programs communicate to the outside world - like attributes, but for fragment shaders, not vertex shaders. `mat4` is just another type, basically the same as an array. `mat4` means we get a 4x4 matrix, or:
+
+```js
+mat = [
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+]
+```
