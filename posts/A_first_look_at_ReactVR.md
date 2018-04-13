@@ -92,7 +92,11 @@ AppRegistry.registerComponent('WelcomeToVR', () => WelcomeToVR);
 
 If everything went well the default screen should look like this:
 
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vr_1.png)
+
 If you mouse over (or touch on a mobile device) the font color should change:
+
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vr_2.png)
 
 ### Conclusion
 
