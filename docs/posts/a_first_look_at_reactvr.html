@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    A first look at ReactVR
+  </h1>
+
+  <div class="post_body">
+    <p>I tried out ReactVR today, and so far I really like what I see! It was really easy to get going and when viewed from a phone, you really feel like you are in the scene.</p>
+<p>ReactVR works by taking React components, and uses OVRUI (Oculus VR User Interface) to provide geometry information to Three.js. Three.js is a library that it built on to of WebGL. The WebGL code, and WebVR APIs (usually by Polyfill since the spec is still in active development) process the information and render the frame.</p>
+<h3>Getting Started</h3>
+<p>Install the ReactVR tools by running:</p>
+<pre><code class="bash lang-bash language-bash">npm install -g react-vr-cli</code></pre>
+<p>Then scaffold a new project, and start it up:</p>
+<pre><code class="bash lang-bash language-bash">react-vr init ColorChanger
+
+cd ColorChanger
+
+npm start</code></pre>
+<p>Visiting <code class="inline">http://localhost:8081/vr/index.html</code> should render “hello” scene:</p>
+<p><img src="https://facebook.github.io/react-vr/img/hellovr.jpg" alt="react-vr"/></p>
+<p>Accesing this from your phone browser is where the real fun starts. As you move the device, the accelerometer detects the movement and manipulates the scene to make it feel as if you are <em>in</em> it.</p>
+<h3>A first component</h3>
+<p>Let’s make a new component. There is tons to learn, like how ReactVR handles 3D transforms, raytracers, and so forth. I will use two simple events (that internally use raytracing), <code class="inline">onExit</code> and <code class="inline">onEnter</code> to change the color of some text when it is clicked (or touched, depending on the user’s input device).</p>
+<pre><code class="js lang-js language-js">import React from &#39;react&#39;;
+import { Text } from &#39;react-vr&#39;
+
+class ColorChange extends React.Component {
+  constructor() {
+    super()
+    this.state = { textColor: &#39;white&#39; }
+  }
+
+  render() {
+    return (
+      &lt;Text
+        style={{
+          layoutOrigin: [0.5, 0.5],
+          transform: [{translate: [0, 0, -3]}],
+          color: this.state.textColor
+        }}
+        onEnter={() =&gt; this.setState({textColor: &#39;red&#39;})}
+        onExit={() =&gt; this.setState({textColor: &#39;white&#39;})}&gt;
+      This text will change.
+      &lt;/Text&gt;
+    )
+  }
+}
+
+export default ColorChange</code></pre>
+<p>The main new stuff here is <code class="inline">layoutOrigin</code> and <code class="inline">transform</code>. <code class="inline">translate: [0, 0, -3]</code> means the <code class="inline">&lt;Text&gt;</code> will move 0m in the X and Y direction, and -3 in the Z direction. The default is the user is looking in then <strong>-z</strong> position. Or, <strong>negative z is forwards</strong>. That’s why we set it to -3. If not, it would be at the default 0, on top of the user’s port of view, which means we wouldn’t be able to see it by default.</p>
+<p>The <code class="inline">&lt;Text&gt;</code> default location is <code class="inline">0, 0</code>. We want to center the text, so we declare a <code class="inline">layoutOrigin</code> or <code class="inline">[0.5, 0.5]</code>.</p>
+<p>Now we should <code class="inline">import</code> and use the component in <code class="inline">index.vr.js</code>:</p>
+<pre><code class="js lang-js language-js">import React from &#39;react&#39;;
+import ColorChange from &#39;./colorChange&#39;
+import {
+  AppRegistry,
+  asset,
+  Pano,
+  Text,
+  View,
+} from &#39;react-vr&#39;;
+
+export default class WelcomeToVR extends React.Component {
+  render() {
+    return (
+      &lt;View&gt;
+        &lt;Pano source={asset(&#39;chess-world.jpg&#39;)}/&gt;
+        &lt;ColorChange /&gt;
+      &lt;/View&gt;
+    );
+  }
+};
+
+AppRegistry.registerComponent(&#39;WelcomeToVR&#39;, () =&gt; WelcomeToVR);</code></pre>
+<p>If everything went well the default screen should look like this:</p>
+<p>If you mouse over (or touch on a mobile device) the font color should change:</p>
+<h3>Conclusion</h3>
+<p>I will be learning more about ReactVR and trying different things out. Even as a OpengL framework, I think it is very powerful. I look forward to getting a pair of VR goggles to experiment with more.</p>
+
+  </div>
+</body>
+</html>
