@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    [draft]WebGL Hello world
+  </h1>
+
+  <div class="post_body">
+    <p>First, we start by selecting the canvas element to which we will render the WebGL scene, and getting a reference to the WebGL context.</p>
+<pre><code class="js lang-js language-js">function main() {
+  const canvas = document.querySelector(&#39;#glCanvas&#39;)  
+  const gl = canvas.getContext(&#39;webgl&#39;)
+}</code></pre>
+<p>Next, we set up the vertex shader’s uniforms and program entry point. <strong>Uniforms</strong> are similar to JavaScript global variables, and can be accessed by both vertex and fragment shaders.</p>
+<pre><code class="js lang-js language-js">const vsSource = `
+  attribute vec4 aVertexPosition;
+
+  uniform mat4 uModelViewMatrix;
+  uniform mat4 uProjectionMatrix;
+
+  void main() {
+    gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+  }
+`</code></pre>
+<p>The first line has a bunch of new information:</p>
+<pre><code class="js lang-js language-js">attribute vec4 aVertexPosition;</code></pre>
+<p>An <strong>attribute</strong> is used to communicate ‘outside’ of a vertex shader, kind of like a JavaScript global variable. Only the vertex andouter JavaScript code can access an attribute - a fragment shader cannot. <code class="inline">vec4</code> is a type - a vector with four points. For example:</p>
+<pre><code class="gl lang-gl language-gl">new vec4(1.0, 2.0, 3.0, 1.0);</code></pre>
+<p>Next we have two more new concepts:</p>
+<pre><code class="js lang-js language-js">uniform mat4 uModelViewMatrix;</code></pre>
+<p>Uniform is how shader programs communicate to the outside world - like attributes, but for fragment shaders, not vertex shaders. <code class="inline">mat4</code> is just another type, basically the same as an array. <code class="inline">mat4</code> means we get a 4x4 matrix, or:</p>
+<pre><code class="js lang-js language-js">mat = [
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+  [0, 0, 0, 0],
+]</code></pre>
+
+  </div>
+</body>
+</html>

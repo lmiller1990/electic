@@ -24,3 +24,5 @@ blog-*.tar
 
 *.swp
 *.swp
+
+.DS_Store

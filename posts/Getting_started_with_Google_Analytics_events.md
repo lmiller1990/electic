@@ -8,19 +8,19 @@ I will make a simple test application in Rails, and get up Google Analytics even
 
 First, you will need an account. Visit [Google Analytics](https://www.google.com/analytics/#?modal_active=none), sign in, and visit the analytics tab.
 
-SS: ga_homepage
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ga_homepage.png)
 
 ### Add a new site
 
 Click on "admin" in the bottom left hand corner, then click on "+ Create Account".
 
-SS: create_account
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/create_account.png)
 
 We are testing on localhost, but GA requires a "real" url. We can use a virtual host to handle this. For now, you can use a placeholder. I am using my.domain.org. So under "Website URL", just enter that.
 
 Now you will see this screen:
 
-SS: tracking
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/tracking.png)
 
 Copy and paste the script that looks like this:
 
@@ -131,7 +131,7 @@ This will send a `event` of `click` type with the `event_label` as the button la
 
 Run the server with `rails server`, and visit `my.domain.org:3000/tests/index`. You must use the `my.domain.org`, and not `localhost`. Click the buttons a bunch of times, and head back to Google Analytics. Click "behavior", then "events" and "top events". You should be able to see the events! Sometimes it can take a bit of time to update. You can also visit the "real time" tab and watch the events update live.
 
-SS: events_page 
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/events_page.png)
 
 ### Conclusion
 

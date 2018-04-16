@@ -3,6 +3,8 @@ defmodule Electic.Generators do
 
   def generate_index() do
     {:ok, files} = File.ls("posts")
+    files = files |> Utils.remove_drafts
+    
 
     posts = for file <- files do
       %Electic.Post{

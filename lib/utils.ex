@@ -90,4 +90,8 @@ defmodule Electic.Utils do
     |> List.last 
     |> Electic.Utils.filename_to_pretty_name
   end
+
+  def remove_drafts files do
+    Enum.filter(files, fn(x) -> !String.starts_with?(x, "[draft]") end)
+  end
 end
