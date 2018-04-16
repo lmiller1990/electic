@@ -37,12 +37,16 @@ Generates html for all posts in `/posts`.
 
 Delete all existing content - this includes posts in `/posts` and content in `/docs`. You probably want to run this if you are using Electic for your own blog, since I committed all my posts alongside the project as I built it.
 
+### Other
+
+You can exclude a post from being added to `index.html` when executing `Electic.Generators.generate_index/0` by prepending the file name with `[draft]`. For example: `posts/[draft]This_post_is_not_ready.md`.
+
 ### Deploy
 Simply push to Github and enable `docs` as the homepage.
 
 ### Styles
 
-Simply add to the relevant `.css` file in `/docs`. To style the `posts/index.html.eex` you should add a `docs/index.css`. Likewise, to style `posts/show.html.eex`, you should add `docs/posts/show.html.eex`.
+Simply add to the relevant `.css` file in `/docs`. To style the `posts/index.html.eex` you should add a `docs/index.css`. Likewise, to style `posts/show.html.eex`, you should add `docs/posts/show.html.eex`. I added a minimal stylesheet with syntax highlighting using prism.
 
 ### Todo:
 
