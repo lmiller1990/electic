@@ -103,8 +103,11 @@ In `render`, we simply render the view with the stylesheet. We also set up liste
 
 If you typed everything correctly, refreshing `localhost:8081/vr` should show:
 
-SS: view_1
-SS: react-events-details
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view-1.png)
+
+And the console when you move your cursor in and out of the view:
+
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-enter.gif)
 
 Moving your cursor in and our of the view should print `enter` and `leave` messages in your console. The border should also become red.
 
@@ -177,7 +180,7 @@ export default class Events extends React.Component {
 
 Refresh the page, and try moving your mouse around. You will notice the `count` increasing a lot faster, and a ton of action in the console. `onInput` is called on every frame of input - each time you move the mouse in the view, the counter increments. 
 
-SS: react-events-on-input
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-on-input.gif)
 
 ### 
 
@@ -193,7 +196,9 @@ handle(e) {
 }
 ```
 
-SS: react-events-details
+The console now shows:
+
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-details.png)
 
 Much more granular. The console is a bit overwhelming now, since `handle` is triggering every frame we move the mouse. In the above screenshot, you can see a `type` property with the value of `MouseInputEvent`. Another type of event available is `KeyboardInputEvent`. Update `handle` to only trigger on `KeyboardInputEvent` and show some of the properties:
 
