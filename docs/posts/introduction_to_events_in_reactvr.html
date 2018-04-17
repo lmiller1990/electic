@@ -98,8 +98,9 @@ AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
 <p><strong>Note on transform</strong>: the <code class="inline">transform</code> property is interesting. You can pass <code class="inline">scale</code> and <code class="inline">rotation</code>, and the order <em>is</em> important. <a href="https://facebook.github.io/react-vr/docs/3dcoordinates-and-transforms.html">More here</a>.</p>
 <p>In <code class="inline">render</code>, we simply render the view with the stylesheet. We also set up listeners for the first two events we will look at, <code class="inline">onEnter</code> and <code class="inline">onExit</code>, which a <code class="inline">console.log</code> to verify they are working before moving forward.</p>
 <p>If you typed everything correctly, refreshing <code class="inline">localhost:8081/vr</code> should show:</p>
-<p>SS: view_1
-SS: react-events-details</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view-1.png" alt=""/></p>
+<p>And the console when you move your cursor in and out of the view:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-enter.gif" alt=""/></p>
 <p>Moving your cursor in and our of the view should print <code class="inline">enter</code> and <code class="inline">leave</code> messages in your console. The border should also become red.</p>
 <h3><code class="inline">onMove</code></h3>
 <p>Okay, so we see how <code class="inline">onEnter</code> and <code class="inline">onExit</code> work. <code class="inline">onMove</code> isn’t much different, but let’s see two quick examples of how it works, and what event properties are made available by ReactVR.</p>
@@ -158,7 +159,7 @@ AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
   }
 }</code></pre>
 <p>Refresh the page, and try moving your mouse around. You will notice the <code class="inline">count</code> increasing a lot faster, and a ton of action in the console. <code class="inline">onInput</code> is called on every frame of input - each time you move the mouse in the view, the counter increments. </p>
-<p>SS: react-events-on-input</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-on-input.gif" alt=""/></p>
 <h3></h3>
 <p>You will also notice instead of the usual JavaScript <code class="inline">event</code>, with properties like <code class="inline">srcTarget</code>, <code class="inline">path</code>, and so on, the console displays <code class="inline">[object Object]</code>.</p>
 <p>The reason is <code class="inline">event</code> is not a native JavaScript event, but a <code class="inline">SyntheticEvent</code>, part of <a href="https://reactjs.org/docs/events.html#other-events">React’s Event System</a>. Some information can be found in <a href="https://github.com/facebook/react-vr/issues/112">this issue</a>, and <a href="https://stackoverflow.com/questions/49372186/reactvr-global-key-press-event-listener/49857848#49857848">this StackOverflow answer</a>. We can access more information by doing <code class="inline">evt.nativeEvent.inputEvent</code>. Let’s try it out. Update <code class="inline">handle</code>:</p>
@@ -167,7 +168,8 @@ AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
   this.setState({ count: this.state.count + 1 })
   console.log(`Event: `, evt)
 }</code></pre>
-<p>SS: react-events-details</p>
+<p>The console now shows:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-details.png" alt=""/></p>
 <p>Much more granular. The console is a bit overwhelming now, since <code class="inline">handle</code> is triggering every frame we move the mouse. In the above screenshot, you can see a <code class="inline">type</code> property with the value of <code class="inline">MouseInputEvent</code>. Another type of event available is <code class="inline">KeyboardInputEvent</code>. Update <code class="inline">handle</code> to only trigger on <code class="inline">KeyboardInputEvent</code> and show some of the properties:</p>
 <pre><code class="js lang-js language-js">handle(e) {
   const evt = e.nativeEvent.inputEvent
