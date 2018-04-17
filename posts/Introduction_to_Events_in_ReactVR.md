@@ -148,15 +148,16 @@ We remove the two previous events, and replaced them with `onMove`. Try refreshi
 
 ### Event Properties
 
-ReactVR provides a number of useful properties for us to observe, such as
-
-- the `type` of event (`mouse`, `keyboard`, `gamepad`...)
-- 
+ReactVR provides a number of useful properties for us to observe, including the `type` of event (`mouse`, `keyboard`, `gamepad`, etc).
 
 To see this information, refactor the above snippet as such:
 
 ```js
 export default class Events extends React.Component { 
+  constructor() {
+    /* no change */
+  }
+
   handle(e) {
     const evt = e
     this.setState({ count: this.state.count + 1 })

@@ -131,14 +131,13 @@ export default class Events extends React.Component {
 AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
 <p>We remove the two previous events, and replaced them with <code class="inline">onMove</code>. Try refreshing and mousing over - you should see the <code class="inline">count</code> increasing on the screen - every frame you move your cursor inside the view.</p>
 <h3>Event Properties</h3>
-<p>ReactVR provides a number of useful properties for us to observe, such as</p>
-<ul>
-<li>the <code class="inline">type</code> of event (<code class="inline">mouse</code>, <code class="inline">keyboard</code>, <code class="inline">gamepad</code>…)
-</li>
-<li></li>
-</ul>
+<p>ReactVR provides a number of useful properties for us to observe, including the <code class="inline">type</code> of event (<code class="inline">mouse</code>, <code class="inline">keyboard</code>, <code class="inline">gamepad</code>, etc).</p>
 <p>To see this information, refactor the above snippet as such:</p>
 <pre><code class="js lang-js language-js">export default class Events extends React.Component { 
+  constructor() {
+    /* no change */
+  }
+
   handle(e) {
     const evt = e
     this.setState({ count: this.state.count + 1 })
