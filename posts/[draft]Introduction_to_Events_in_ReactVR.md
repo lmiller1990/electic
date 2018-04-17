@@ -2,6 +2,8 @@
 
 ReactVR is an exciting new way to build 3D and VR environments, which can be easily deployed and accessed in a browser. One of the first things you will want to do in any web app is allow the user to interact with your creation. This leads to the topic of this post, handling events in ReactVR.
 
+The source code for this article is [here](https://github.com/lmiller1990/react-vr-events-examples).
+
 ## Setup
 
 There are lots of guides to get ReactVR set up. You can follow the [official documentation](https://facebook.github.io/react-vr/docs/getting-started.html). Basically:
@@ -56,16 +58,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'lime',
     transform: [{ translate: [0, 0, -1] }],
     layoutOrigin: [0.5, 0.5],
+  },
+  entered: {
+    borderColor: 'red',
+    borderWidth: 0.05
   }
 })
 
 export default class Events extends React.Component {
+  constructor() {
+    super()
+    this.state = { entered: false }
+  }
   render() {
     return (
       <View 
-        onEnter={() => console.log('enter')}
-        onExit={() => console.log('leave')}
-        style={styles.view}
+        onEnter={() => {
+          this.setState({ entered: true }); console.log('enter')
+        }
+        onExit={() => {
+          this.setState({ entered: false }); console.log('leave')
+        }
+        style={[styles.view, this.state.entered ? styles.entered : {}]}
       >
       </View>
     );
@@ -90,8 +104,9 @@ In `render`, we simply render the view with the stylesheet. We also set up liste
 If you typed everything correctly, refreshing `localhost:8081/vr` should show:
 
 SS: view_1
+SS: react-events-details
 
-Moving your cursor in and our of the view should print `enter` and `leave` messages in your console.
+Moving your cursor in and our of the view should print `enter` and `leave` messages in your console. The border should also become red.
 
 ### `onMove`
 
@@ -140,7 +155,9 @@ To see this information, refactor the above snippet as such:
 ```js
 export default class Events extends React.Component { 
   handle(e) {
-    console.log(`Event: `)
+    const evt = e
+    this.setState({ count: this.state.count + 1 })
+    console.log(`Event: `, evt)
   }
 
   render() {
@@ -157,3 +174,63 @@ export default class Events extends React.Component {
   }
 }
 ```
+
+Refresh the page, and try moving your mouse around. You will notice the `count` increasing a lot faster, and a ton of action in the console. `onInput` is called on every frame of input - each time you move the mouse in the view, the counter increments. 
+
+SS: react-events-on-input
+
+### 
+
+You will also notice instead of the usual JavaScript `event`, with properties like `srcTarget`, `path`, and so on, the console displays `[object Object]`.
+
+The reason is `event` is not a native JavaScript event, but a `SyntheticEvent`, part of [React's Event System](https://reactjs.org/docs/events.html#other-events). Some information can be found in [this issue](https://github.com/facebook/react-vr/issues/112), and [this StackOverflow answer](https://stackoverflow.com/questions/49372186/reactvr-global-key-press-event-listener/49857848#49857848). We can access more information by doing `evt.nativeEvent.inputEvent`. Let's try it out. Update `handle`:
+
+```js
+handle(e) {
+  const evt = e.nativeEvent.inputEvent
+  this.setState({ count: this.state.count + 1 })
+  console.log(`Event: `, evt)
+}
+```
+
+SS: react-events-details
+
+Much more granular. The console is a bit overwhelming now, since `handle` is triggering every frame we move the mouse. In the above screenshot, you can see a `type` property with the value of `MouseInputEvent`. Another type of event available is `KeyboardInputEvent`. Update `handle` to only trigger on `KeyboardInputEvent` and show some of the properties:
+
+
+```js
+handle(e) {
+  const evt = e.nativeEvent.inputEvent
+  if (evt.type === 'KeyboardInputEvent') {
+    this.setState({ count: this.state.count + 1 })
+    console.log(`Key pressed. \nkeyCode: ${evt.keyCode}.\nkey: ${evt.key}\neventType: ${evt.eventType}`)
+
+  }
+}
+```
+
+Refresh the page, ensure the view is focused by clicking it, and press any key. The `count` instantly hits 3, and the console shows:
+
+```
+Key pressed. 
+keyCode: 68.
+key: d
+eventType: keydown
+
+Key pressed. 
+keyCode: 0.
+key: d
+eventType: keypress
+
+Key pressed. 
+keyCode: 68.
+key: d
+eventType: keyup
+Key pressed. 
+```
+
+So actually __three__ events are occurring, the initial press (keydown), the input itself (keypress) and when the key is released (keyup). All of these are useful. If you continue to hold the key, keydown and keypress will continually trigger.
+
+### Conclusion
+
+ReactVR makes it easy to detect and respond to events. You can also build your own events using raycasts, as long as you implement the [required methods](https://facebook.github.io/react-vr/docs/input.html#cursor-systems). I am looking forward to learning more ReactVR. The source code is [here](https://github.com/lmiller1990/react-vr-events-examples).
