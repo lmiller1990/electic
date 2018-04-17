@@ -103,7 +103,7 @@ In `render`, we simply render the view with the stylesheet. We also set up liste
 
 If you typed everything correctly, refreshing `localhost:8081/vr` should show:
 
-![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view-1.png)
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view_1.png)
 
 And the console when you move your cursor in and out of the view:
 

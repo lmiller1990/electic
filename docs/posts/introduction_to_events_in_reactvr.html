@@ -98,7 +98,7 @@ AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
 <p><strong>Note on transform</strong>: the <code class="inline">transform</code> property is interesting. You can pass <code class="inline">scale</code> and <code class="inline">rotation</code>, and the order <em>is</em> important. <a href="https://facebook.github.io/react-vr/docs/3dcoordinates-and-transforms.html">More here</a>.</p>
 <p>In <code class="inline">render</code>, we simply render the view with the stylesheet. We also set up listeners for the first two events we will look at, <code class="inline">onEnter</code> and <code class="inline">onExit</code>, which a <code class="inline">console.log</code> to verify they are working before moving forward.</p>
 <p>If you typed everything correctly, refreshing <code class="inline">localhost:8081/vr</code> should show:</p>
-<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view-1.png" alt=""/></p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view_1.png" alt=""/></p>
 <p>And the console when you move your cursor in and out of the view:</p>
 <p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-enter.gif" alt=""/></p>
 <p>Moving your cursor in and our of the view should print <code class="inline">enter</code> and <code class="inline">leave</code> messages in your console. The border should also become red.</p>
