@@ -6,14 +6,14 @@ Today I followed a guide by Adam Gamble about how to build a router for Rack, th
 
 A minimal Rack web server is as follows. Create a `Gemfile`:
 
-```rb
+```ruby
 source "http://rubygems.org"
 gem "rack"
 ```
 
 And run `bundle`. To create a simple Rack server, all you need is an object with the `call` method. `call` will be passed information about the web request. Create `lib/basic_controller.rb`:
 
-```rb
+```ruby
 class BasicController
   def call(env)
     [200, {}, ["Hello from basic controller"]]
@@ -23,7 +23,7 @@ end
 
 And a `basic_rack.ru` at the top level:
 
-```rb
+```ruby
 require 'rack'
 load 'lib/basic_controller.rb'
 
@@ -63,13 +63,13 @@ Now we know the basics of a Rack application. Let's make a more robust example, 
 
 Let's start fresh. Create a `Gemfile` and add Rack:
 
-```rb
+```ruby
 gem "rack"
 ```
 
 Create a `config.ru` and include the following:
 
-```rb
+```ruby
 require 'bundler'
 Bundler.require
 
@@ -79,7 +79,7 @@ require File.join(File.dirname(__FILE__), "lib", "main_rack")
 
 Try running `rackup config.ru`. It will complain that `lib/main_rack.rb` doesn't exist. Create that, too, and add the following:
 
-```rb
+```ruby
 class MainRack
 end
 ```
@@ -92,7 +92,7 @@ Run the app again (with `rackup config.ru`). Now we have a new error:
 
 This error is from Rack itself. Rack requires a `run` method, that takes a class with a `call` method. Recall the original `BasicController`:
 
-```rb
+```ruby
 class BasicController
   def call(env)
     [200, {}, ["Hello from basic controller"]]
@@ -102,7 +102,7 @@ end
 
 Go ahead and create `lib/request_handler.rb`.
 
-```rb
+```ruby
 class RequestHandler
   def call(env)
   end
@@ -126,7 +126,7 @@ Rack::Lint::LintError: Status must be >=100 seen as integer
 
 Right. `call` should return a status, headers, and a body. Let's do that.
 
-```rb
+```ruby
 class RequestHandler
   def call(env)
     [200, {}, ["ok"]]
@@ -140,7 +140,7 @@ Now we can curl the Rack server. Let's move on to adding some routes.
 
 We will store the `router` reference in `MainRackApplication.router`, which will have a `route_for` method, that decides which controller will handle the request. Update `request_handler.rb`:
 
-```rb
+```ruby
 class RequestHandler
   def call(env)
     route = MainRackApplication.router.route_for(env)
@@ -155,7 +155,7 @@ end
 
 curling the server now will result in an error, since neither the `router` class, not the `route_for` method, exists. Create `lib/router.rb`, with just enough to let the server run again with `rackup config.ru` and curl it:
 
-```rb
+```ruby
 class Router
   def route_for(env)
   end
@@ -164,7 +164,7 @@ end
 
 Also, update `lib_main_rack.rb` to `require` the router, and set an instance variable:
 
-```rb
+```ruby
 require File.join(File.dirname(__FILE__), 'router.rb')
 
 class MainRack
@@ -182,7 +182,7 @@ Now curling the server returns a 404, since `route_for` returns `nil`.
 
 Before we implement the router logic and controllers, we need to decide on the DSL for the router. Let's make it like Rails'. Create `config/routes.rb`, and inside add two routes:
 
-```rb
+```ruby
 MainRackApplication.router.config do
   get "/users", to: "users#index"
   get "/users/show", to: "users#show"
@@ -190,7 +190,7 @@ end
 ```
 We will define a `config` method on the `router`, which takes a block. Inside the block, we define a DSL of the following format:
 
-```rb
+```ruby
 [HTTP Verb] [path], to: "controller#method"
 ```
 
@@ -198,7 +198,7 @@ Soon we will use `instance_eval` to turn this into a function call to a method c
 
 Let's load the routes on startup. In `config.ru`, require `config/routes`:
 
-```rb
+```ruby
 # ...
 require File.join(File.dirname(__FILE__), "config", "routes")
 # ...
@@ -221,7 +221,7 @@ Okay, we can once again start the app without errors. But `config` doesn't do an
 
 Our goal is to create a hash called `@routes`, that we can use to look up the correct controller for each incoming request. Let's add an `attr_reader` and initialize an empty hash for the `@routes`. The hash will have a default value of an empty array. This means if you ask for an unknown key, you get an empty array by default.
 
-```rb
+```ruby
 class Router
   attr_reader :routes
   def initialize
@@ -235,7 +235,7 @@ end
 Now onto config. We want the `@routes` hash to look like this:
 
 
-```rb
+```ruby
 { :get => [
     "/test/show": {:klass => "TestController", :method => "show" }
   ]
@@ -244,7 +244,7 @@ Now onto config. We want the `@routes` hash to look like this:
 
 Then if we get a `GET` request, we can loop all the `GET` routes, until we find the matching one. With this goal in mind, let's implement `config`:
 
-```rb
+```ruby
 def config(&block)
   instance_eval &block
 end
@@ -252,14 +252,14 @@ end
 
 This will produce the following, based on our `config/routes.rb` DSL:
 
-```rb
+```ruby
 get("users", { :to -> "users#show" })
 ```
 
 So we need a `get` method, that takes a String path and an Hash of options.
 
 
-```rb
+```ruby
 def get(path, options={})
   @routes[:get] << [path, parse_opts(options[:to])]
 end
@@ -267,7 +267,7 @@ end
 
 We should format the `options` nicely. If we just did `[path, options[:to]]` we would get:
 
-```rb
+```ruby
 @routes[:get] = [
   [
     "/users/show", "users#show"
@@ -277,7 +277,7 @@ We should format the `options` nicely. If we just did `[path, options[:to]]` we 
 
 We want to split "users#show" to a hash with `controller` and `method` keys. Let's implement `parase_opts`:
 
-```rb
+```ruby
 def parse_opts(options)
   controller, method = options.split("#")
   {:controller => "#{controller.capitalize}Controller", :method => method}
@@ -286,7 +286,7 @@ end
 
 Check it out by doing a `puts` after `instance_eval` in `config` and restarting the server:
 
-```rb
+```ruby
 Routes
 {:get=>[["/users", {:controller=>"UsersController", :method=>"index"}], ["/users/show", {:controller=>"UsersController", :method=>"show"}]]}
 ```
@@ -299,7 +299,7 @@ Now we have the routes set up. Let's add two simple controllers - a `BaseControl
 
 First, add the following to `app/controllers/base_controller.rb`:
 
-```rb
+```ruby
 class BaseController
   attr_reader :env
 
@@ -314,7 +314,7 @@ This lets any controllers inheriting from `BaseController` access `env`, which c
 Now add the following code to `app/controllers/users_controller.rb`:
 
 
-```rb
+```ruby
 class UsersController < BaseController
   def index
   end
@@ -326,13 +326,13 @@ end
 
 Remember, the controller has to return a response that complies to what Rack expects:
 
-```rb
+```ruby
 [status = 200, headers = {}, [body]]
 ```
 
 Let's go ahead and make class for this. Add it in `lib/response.rb`:
 
-```rb
+```ruby
 class Response
   attr_accessor :status_code, :headers, :body
 
@@ -350,7 +350,7 @@ Nothing too exciting. `@headers` aren't necessary, so they are set to an empty h
 
 Now we can head back to `users_controller.rb` and implement `#index`.
 
-```rb
+```ruby
 def index
   Response.new.tap do |response|
     response.body = "Hello from users#index\n"
@@ -361,7 +361,7 @@ end
 
 `tap` is another way to assign instance variables on a new object. Instead of
 
-```rb
+```ruby
 response = Response.new
 response.body = "..."
 
@@ -370,7 +370,7 @@ return response
 
 We can do
 
-```rb
+```ruby
 Response.new.tap do |response|
   response.body = "..."
 end
@@ -380,7 +380,7 @@ end
 
 We didn't `require` the newly added `response.rb`, so do that in `base_controller`. This will let all controllers access the `Response` object.
 
-```rb
+```ruby
 require File.join(File.dirname(__FILE__), "..", "..", "lib", "response")
 
 class BaseController
@@ -394,7 +394,7 @@ end
 
 Okay. We actually have enough to see this working now. Let's finally do something in `router#route_for`. Before doing so, review `lib/request_handler.rb`:
 
-```rb
+```ruby
 class RequestHandler
   def call(env)
     route = MainRackApplication.router.route_for(env)
@@ -409,14 +409,14 @@ end
 
 `route` should be a `response` object, with the format of:
 
-```rb
+```ruby
 [status = 200, headers = {}, [body]]
 ```
 
 For now, update the `if` statement to return the `route`:
 
 
-```rb
+```ruby
 if route
   route
 else
@@ -463,7 +463,7 @@ That was a lot of hardcoding, but it appears to be working! Let's refactor and a
 
  First, we can move the logic from `route_for` to a dedicated `route` object. Create `lib/route.rb`, and add:
 
-```rb
+```ruby
 require File.join(File.dirname(__FILE__), '../', 'app', 'controllers', 'base_controller')
 
 class Route
@@ -480,13 +480,13 @@ end
 
 Each `route` will receive an array that has this shape:
 
-```rb
+```ruby
 [path = "/users", {:controller => "UsersController", :method => "index"}]
 ```
 
 In `initialize` we assign the correct values to instance variables. The next thing is dynamically `require` the correct class:
 
-```rb
+```ruby
 def handle_requires
   require File.join(File.dirname(__FILE__), '../', 'app', 'controllers', underscore(@controller))
 end
@@ -504,7 +504,7 @@ We stole `underscore` from Rails - we need to change `UsersController` to `users
 
 Now we just need the logic to choose the correct controller (we required all the controller, but we also need to create and instance) and then use `send` to call the correct instance method that corresponds to the request:
 
-```rb
+```ruby
 def klass
   Module.const_get(@controller)
 end
@@ -516,7 +516,7 @@ end
 
 Looking good. Now we can clean up the `route_for` method in `lib/router/rb`:
 
-```rb
+```ruby
 def route_for(env)
   path = env["PATH_INFO"]
   method = env["REQUEST_METHOD"].downcase.to_sym
@@ -532,7 +532,7 @@ Pretty simple. We just find the corresponding `method`, in this case `:get`, and
 
 Finally, we can update `lib/request_handler.rb`:
 
-```rb
+```ruby
 class RequestHandler
   def call(env)
     route = MainRackApplication.router.route_for(env)
