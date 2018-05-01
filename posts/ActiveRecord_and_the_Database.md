@@ -4,18 +4,18 @@ If you do things the Rails Way, including using the standard table names that co
 
 Let's look at a standard `has_many` and `belongs_to` relationship, using the Rails way:
 
-```rb
+```ruby
 rails generate model investor
 ```
 
 Gives the following model and migration:
 
-```rb
+```ruby
 class Investor < ApplicationRecord
 end
 ```
 
-```rb
+```ruby
 class CreateInvestors < ActiveRecord::Migration[5.1]
   def change
     create_table :investors do |t|
@@ -42,13 +42,13 @@ rails generate model house investor:references
 
 Which gives us:
 
-```rb
+```ruby
 class House < ApplicationRecord
   belongs_to :investor
 end
 ```
 
-```rb
+```ruby
 class CreateHouses < ActiveRecord::Migration[5.1]
   def change
     create_table :houses do |t|
@@ -72,7 +72,7 @@ The Rails Way knows if we have a `belongs_to`, it will use the corresponding mod
 
 There is one part we have to do by hand, however. If we drop down into `rails console` and run:
 
-```rb
+```ruby
 Investor.new.houses
 ```
 
@@ -84,7 +84,7 @@ NoMethodError: undefined method `houses' for #<Investor id: nil, created_at: nil
 
 That's because we need to add `has_many :houses` to the `investor` model:
 
-```rb
+```ruby
 class Investor < ApplicationRecord
   has_many :houses
 end
@@ -92,7 +92,7 @@ end
 
 Now it works:
 
-```rb
+```ruby
 i = Investor.new.save
 i = Investor.first # load newly created investor
 
@@ -115,10 +115,10 @@ bin/rails db:migrate
 Now the model:
 
 ```sh
-touch app/models/my_investor.rb
+touch app/models/my_investor.ruby
 ```
 
-```rb
+```ruby
 class MyInvestor < ApplicationRecord
 
 end
@@ -130,7 +130,7 @@ Dropping into a `rails console` and running `MyInvestor.new` yields `ActiveRecor
 
 By default, Rails looks for a table which is the pluralized version of the model. We can specify another table name using `self.table_name`:
 
-```rb
+```ruby
 class MyInvestor < ApplicationRecord
   self.table_name = "existing_investors"
 end
@@ -142,7 +142,7 @@ The same thing can be applied for the initial `my_house` model and `existing_hou
 rails g migration create_existing_house
 ```
 
-```rb
+```ruby
 class CreateExistingHouse < ActiveRecord::Migration[5.1]
   def change
     create_table :existing_houses do |t|
@@ -153,8 +153,8 @@ class CreateExistingHouse < ActiveRecord::Migration[5.1]
 end
 ```
 
-```rb
-# app/models/my_house.rb
+```ruby
+# app/models/my_house.ruby
 class MyHouse < ApplicationRecord
 
 end
@@ -162,7 +162,7 @@ end
 
 Let's add the `has_many` relationship first. Instead of houses, I want to call them `investments`.
 
-```rb
+```ruby
 class MyInvestor < ApplicationRecord
   self.table_name = "existing_investors"
 
@@ -172,14 +172,20 @@ end
 
 `rails console` gives us:
 
-```rb
+```ruby
 MyInvestor.first.investments
 #=> NameError: uninitialized constant MyInvestor::Investment
 ```
 
-Obviously, we don't even have an `investments` model. Try using `class_name`, and we get a new error:
+Obviously, we don't even have an `investments` model. Try using `class_name`: 
 
-```rb
+```ruby
+has_many :investments, class_name: 'MyHouse'
+```
+
+And we get a new error:
+
+```ruby
 MyHouse Load (0.3ms)  SELECT  "existing_houses".* FROM "existing_houses" WHERE "existing_houses"."my_investor_id" = ? LIMIT ?  [["my_investor_id", 1], ["LIMIT", 11]]
 
 ActiveRecord::StatementInvalid: SQLite3::SQLException: no such column: existing_houses.my_investor_id: SELECT  "existing_houses".* FROM "existing_houses" WHERE "existing_houses"."my_investor_id" = ? LIMIT ?
@@ -197,7 +203,7 @@ We need to do *three* things:
 
 For the first step, we generate new migration:
 
-```rb
+```ruby
 class AddInvestorKeyToMyHouse < ActiveRecord::Migration[5.1]
   def change
     change_table :existing_houses do |t|
@@ -209,10 +215,10 @@ end
 
 `t.references :existing_investor` creates a key of the same name with `_id` appended - so `existing_investor_id`.
 
-For the second step, we can update `my_house.rb`:
+For the second step, we can update `my_house.ruby`:
 
 
-```rb
+```ruby
 class MyHouse < ApplicationRecord
   self.table_name = "existing_houses"
 
@@ -222,7 +228,7 @@ end
 
 For the third, we update `MyHouse` as such:
 
-```rb
+```ruby
 class MyHouse < ApplicationRecord
   self.table_name = "existing_houses"
 
@@ -232,14 +238,14 @@ end
 
 Great! Now we can do:
 
-```rb
+```ruby
 MyInvestor.first.investments.create!
 #=> #<MyHouse id: 3, created_at: "2018-05-01 08:17:48", updated_at: "2018-05-01 08:17:48", existing_investor_id: 1>
 ```
 
 Another nice thing Rails lets us to is customize the `belongs_to`, which can make the relationships between models more intuitive. Let's change `belongs_to :existing_investor` to `belongs_to :buyer`:
 
-```rb
+```ruby
 class MyHouse < ApplicationRecord
   self.table_name = "existing_houses"
 
