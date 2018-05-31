@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    A Webpack Config from Scratch For Vue
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, I will show how to prepare a webpack setup from scratch to develop Vue apps, complete with <code class="inline">webpack-dev-server</code> and hot reload. We will see how to use create <code class="inline">rules</code> for <code class="inline">loaders</code>, and how to use <code class="inline">plugins</code>.</p>
+<p>The source code can be found <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/basic">here</a>.</p>
+<h3>Setup</h3>
+<p>First, start of with an empty <code class="inline">package.json</code> by running <code class="inline">echo {} &gt;&gt; package.json</code>.</p>
+<p>Next, we need to install webpack, the cli tool and the dev server with </p>
+<pre><code class="bash lang-bash language-bash">npm install webpack webpack-cli webpack-dev-server --save-dev</code></pre>
+<p>Before going any further, run <code class="inline">npx webpack</code>. <code class="inline">npx</code> is a tool to execute binaries - webpack created one for us, located in <code class="inline">node_modules/.bin/webpack</code>.</p>
+<p>We get two errors:</p>
+<pre><code class=" lang- language-">WARNING in configuration
+The &#39;mode&#39; option has not been set, webpack will fallback to &#39;production&#39; for this value. Set &#39;mode&#39; option to &#39;development&#39; or &#39;production&#39; to enable defaults for each environment.
+You can also set it to &#39;none&#39; to disable any default behavior. Learn more: https://webpack.js.org/concepts/mode/
+
+ERROR in Entry module not found: Error: Can&#39;t resolve &#39;./src&#39; in &#39;/Users/lachlanmiller/javascript/vue/webpack-simple&#39;</code></pre>
+<p>The first one is complaining about the <code class="inline">mode</code> option - default is <code class="inline">production</code>. Let’s fix that, and also add an npm script to <code class="inline">package.json</code> at the same time:</p>
+<pre><code class="js lang-js language-js">&quot;scripts&quot;: {
+  &quot;dev&quot;: &quot;npx webpack --mode development&quot;
+}</code></pre>
+<p>Now we have one more error - <code class="inline">Can&#39;t resolve &#39;./src&#39;</code>. So let’s make <code class="inline">src</code> with <code class="inline">mkdir src</code>, then <code class="inline">touch src/index.js</code>. Now <code class="inline">npm run dev</code> yields:</p>
+<pre><code class="bash lang-bash language-bash">
+Hash: 52bc792a675c1ee221f2
+Version: webpack 4.10.2
+Time: 71ms
+Built at: 2018-05-30 23:58:42
+  Asset      Size  Chunks             Chunk Names
+main.js  3.77 KiB    main  [emitted]  main
+Entrypoint main = main.js
+[./src/index.js] 0 bytes {main} [built]</code></pre>
+<p>It also created <code class="inline">dist/main.js</code>. Take a look - it contains about a hundred lines of webpack boilerplate, and nothing else, since <code class="inline">src/index.js</code> is empty at the moment.</p>
+<h3>Making a <code class="inline">webpack.config.js</code></h3>
+<p>The next step is to create a config file to store our webpack settings. Let’s use the default, <code class="inline">webpack.config.js</code>. Create that at root level. Before going any further, we will add a plugin, <code class="inline">HtmlWebpackPlugin</code>, by running <code class="inline">npm install html-webpack-plugin --save-dev</code>. This plugin lets us create a default <code class="inline">index.html</code>. and load the webpack bundle. Our <code class="inline">index.html</code> will need an <code class="inline">&lt;div id=&quot;app&quot;&gt;&lt;/div&gt;</code> for the Vue appplication to mount. Create the template first, called <code class="inline">template.html</code>:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Now inside of <code class="inline">webpack.config.js</code>, add the first lines of the webpack config:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+const HtmlWebpackPlugin = require(&quot;html-webpack-plugin&quot;)
+
+module.exports = {
+  entry: &quot;./src/index.js&quot;,
+
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, &quot;template.html&quot;)
+    })
+  ]
+}</code></pre>
+<p>We specify the entry - normally you specify the <code class="inline">output</code> too, but if you don’t, it defaults to <code class="inline">dist/main.js</code>. We imported the plugin, and passed the template we want to use. Running <code class="inline">npm run dev</code> yields the following output:</p>
+<pre><code class="bash lang-bash language-bash">Hash: dae6c53437d700ae34a8
+Version: webpack 4.10.2
+Time: 410ms
+Built at: 2018-05-31 00:10:02
+     Asset       Size  Chunks             Chunk Names
+   main.js   3.77 KiB    main  [emitted]  main
+index.html  191 bytes          [emitted]
+Entrypoint main = main.js</code></pre>
+<p>A bunch more stuff, of which the some I omitted, is printed. Notice we now have <code class="inline">index.html</code> - take a look in <code class="inline">dist/index.html</code>.</p>
+<h3>Adding Vue</h3>
+<p>Finally, it is time to add Vue with <code class="inline">npm install vue --save</code>. Node.js does not support <code class="inline">import</code> and <code class="inline">export</code> by default (as of 10.3 it does, <strong>experimentally</strong>, more <a href="https://nodejs.org/api/esm.html">here</a>). Webpack, however, does (I’m not exactly sure how, perhaps using babel internally?). Anyway, that means we can use <code class="inline">import</code> and <code class="inline">export</code>! Update <code class="inline">src/index.js</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  new Vue({
+    el: &quot;#app&quot;,
+    
+    data() {
+      return {
+        msg: &quot;Hello&quot;
+      }
+    },
+
+    template: &quot;&lt;div&gt;{{ msg }}&lt;/div&gt;&quot;
+  })
+})</code></pre>
+<p>Now run <code class="inline">npm run dev</code>. We now see:</p>
+<pre><code class="sh lang-sh language-sh">Hash: 9c0afed8a7477e9712d1
+Version: webpack 4.10.2
+Time: 645ms
+Built at: 2018-05-31 00:23:36
+     Asset       Size  Chunks             Chunk Names
+   main.js    317 KiB    main  [emitted]  main
+index.html  191 bytes          [emitted]</code></pre>
+<p>Now <code class="inline">main.js</code> is 317 kb! That’s HUGE! Mainly because we are using the full build of Vue, without any minifying and so forth. It’s okay for now. Run a server in <code class="inline">dist</code>, for example on MacOS you can do <code class="inline">cd dist &amp;&amp; python -m SimpleHTTPServer</code>, and visiting <code class="inline">localhost:8000</code> should yield this error in the console:</p>
+<pre><code class="bash lang-bash language-bash">[Vue warn]: You are using the runtime-only build of Vue where the template compiler is not available. Either pre-compile the templates into render functions, or use the compiler-included build.</code></pre>
+<p>This is because are using a <code class="inline">template</code> to construct our Vue app - the compiler which converts <code class="inline">template</code> into HTML and JavaScript is not available when using the runtime-only build (<code class="inline">import Vue from &quot;vue&quot;</code>). We need to use compiler included build, for now. We will fix this soon. Instead using <code class="inline">import Vue from &quot;vue/dist/vue.esm.js&quot;</code>, and run <code class="inline">npm run dev</code> once again. Now you should see “Hello” displayed.</p>
+<h3>Adding <code class="inline">vue-loader</code></h3>
+<p>Once of the best features of Vue is single file components (<code class="inline">.vue</code> files). Let’s refactor <code class="inline">src/index.js</code> to use one. Create <code class="inline">Hello.vue</code> in <code class="inline">src</code> with <code class="inline">touch src/Hello.vue</code>. Inside add the following:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;{{ msg }}&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  name: &quot;Hello&quot;,
+
+  data() {
+    return {
+      msg: &quot;Hello&quot;
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Update <code class="inline">src/index.js</code> to use the new component:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue/dist/vue.esm.js&quot;
+import Hello from &quot;./Hello.vue&quot;
+
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  new Vue({
+    el: &quot;#app&quot;,
+    
+    components: {
+      Hello
+    },
+
+    template: &quot;&lt;Hello /&gt;&quot;
+  })
+})</code></pre>
+<p>Run <code class="inline">npm run dev</code> to compile away. Alas!</p>
+<pre><code class="bash lang-bash language-bash">ERROR in ./src/Hello.vue
+Module parse failed: Unexpected token (1:0)
+You may need an appropriate loader to handle this file type.
+| &lt;template&gt;
+|   &lt;div&gt;{{ msg }}&lt;/div&gt;
+| &lt;/template&gt;
+ @ ./src/index.js 2:0-31 9:6-11</code></pre>
+<p>Webpack hit an error at line 2 of <code class="inline">src/index.js</code>. Webpack only knows about <code class="inline">.js</code> files out the the box. We “need an appropriate loader” to handle <code class="inline">.vue</code> files. Run <code class="inline">npm install vue-loader --save-dev</code>. Now update <code class="inline">webpack.config.js</code>:</p>
+<pre><code class="js lang-js language-js">const VueLoaderPlugin = require(&#39;vue-loader/lib/plugin&#39;)
+
+module.exports = {
+  // ...
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: &quot;vue-loader&quot;
+      }
+    ]
+  },
+
+  plugins: [
+    // ...
+    new VueLoaderPlugin()
+  ]
+}</code></pre>
+<p>More about <code class="inline">vue-loader</code> is found <a href="https://vue-loader.vuejs.org/guide/#manual-configuration">here</a>.</p>
+<p>Running <code class="inline">npm run dev</code> <strong>should</strong> now work, but actually it doesn’t. You get:</p>
+<pre><code class="bash lang-bash language-bash">ERROR in ./src/Hello.vue
+Module build failed: Error: Cannot find module &#39;vue-template-compiler&#39;</code></pre>
+<p>And several screens of webpack/vue-loader stacktraces. This is because <code class="inline">vue-loader</code> lists <code class="inline">vue-template-compiler</code> as a <code class="inline">peerDependency</code>, you can see it <a href="https://github.com/vuejs/vue-loader/blob/b1023cd7ccff0203025db44cd3088550b3ac8558/package.json#L37">here</a>, which means even though it isn’t listed as a dependency, you need to have it installed. This sucks, it should be a dependency, but it’s not for some reason (probably a good one, if you know please tell me). </p>
+<p>Anyway, as the error suggests we should run <code class="inline">npm install vue-template-compiler --save-dev</code>. Now <code class="inline">npm run dev</code> works! Visiting your server (mine is <code class="inline">localhost:8000</code>) should still show the Hello message.</p>
+<pre><code class="bash lang-bash language-bash">Hash: fbbc205659d2efc8f1c6
+Version: webpack 4.10.2
+Time: 904ms
+Built at: 2018-05-31 21:17:47
+     Asset       Size  Chunks             Chunk Names
+   main.js    327 KiB    main  [emitted]  main
+index.html  191 bytes          [emitted]</code></pre>
+<p>Remember 327 KiB - this is about to get a lot smaller.</p>
+<h3>Using a render function</h3>
+<p>Remember when we used <code class="inline">vue/dist/vue.esm.js</code> instead of just <code class="inline">vue</code>? Now it the time to fix it. The reason is the standard build does not include <code class="inline">vue-template-compiler</code>. This makes it slightly lighter. We will compile <code class="inline">.vue</code> files on the server, but in the production code, we will use a <code class="inline">render</code> function instead to make the bundle slightly lighter.</p>
+<p>Update <code class="inline">src/index.js</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import Hello from &quot;./Hello.vue&quot;
+
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  new Vue({
+    el: &quot;#app&quot;,
+    
+    render: h =&gt; h(Hello)
+  })
+})</code></pre>
+<p>Much nicer. Run <code class="inline">npm run dev</code>:</p>
+<pre><code class="bash lang-bash language-bash">Hash: 97e9a78ffb673fafd97b
+Version: webpack 4.10.2
+Time: 821ms
+Built at: 2018-05-31 21:18:35
+     Asset       Size  Chunks             Chunk Names
+   main.js    245 KiB    main  [emitted]  main
+index.html  191 bytes          [emitted]</code></pre>
+<p>Actually, now the bundle is 245 KiB - a significant improvement from 327 KiB. Also, the code looks a bit nicer.</p>
+<h3>Webpack Dev Server</h3>
+<p>Now the exciting part, the <code class="inline">dev-server</code>. Until now, we were building a new bundle (by hand) and refreshing <code class="inline">localhost:8000</code> like suckers. Let’s automate that with <code class="inline">webpack-dev-server</code>. We installed <code class="inline">webpack-dev-server</code> at the start, so you should be able to use it already by running <code class="inline">npx webpack-dev-server</code>.</p>
+<pre><code class="bash lang-bash language-bash">ℹ ｢wds｣: Project is running at http://localhost:8080/
+ℹ ｢wds｣: webpack output is served from /
+⚠ ｢wdm｣: Hash: 55f5a357f2dc60279c3f
+Version: webpack 4.10.2
+Time: 1210ms
+Built at: 2018-05-31 21:26:08
+     Asset       Size  Chunks             Chunk Names
+   main.js    204 KiB       0  [emitted]  main
+index.html  191 bytes          [emitted]</code></pre>
+<p>As noted, it is running at <code class="inline">localhost:8080</code>. You don’t need your python server anymore! Visit <code class="inline">localhost:8080</code> and then try editing <code class="inline">src/Hello.vue</code>. When you save the file, it should automatically update. Occasionally doesn’t, but mostly the dev server is pretty good and saves a lot of manually refreshing. It also preserves the state of the app (sometimes). <code class="inline">main.js</code> is now only 204 KiB, I am not sure why it is smaller when running the dev server.</p>
+<p>Let’s add a script in <code class="inline">package.json</code>:</p>
+<pre><code class="js lang-js language-js">&quot;scripts&quot;: {
+  &quot;build&quot;: &quot;npx webpack&quot;,
+  &quot;dev&quot;: &quot;npx webpack-dev-server --mode development&quot;
+}</code></pre>
+<p>The old <code class="inline">dev</code> script is now <code class="inline">build</code>. It will have <code class="inline">--mode production</code> at a later date. Lastly, we can add a few options to <code class="inline">webpack.config.js</code> to make the dev server a bit better. </p>
+<pre><code class="js lang-js language-js">module.exports = {
+  // ...
+  devServer: {
+    overlay: true
+  }
+}</code></pre>
+<p>Now if there is a problem in our code, it will appear in the browser, so we can find it more quickly. Try creating a syntax error, and you should see something like this:</p>
+<pre><code class="bash lang-bash language-bash">Failed to compile.
+
+./src/Hello.vue?vue&amp;type=script&amp;lang=js (./node_modules/vue-loader/lib??vue-loader-options!./src/Hello.vue?vue&amp;type=script&amp;lang=js)
+Module parse failed: Unexpected token (11:19)
+You may need an appropriate loader to handle this file type.
+|   data() {
+|     return {
+|       msg: &quot;Hello&quot;,,
+|     }
+|   }</code></pre>
+<p>I added a extra <code class="inline">,</code>. <code class="inline">You may need an appropriate loader to handle this file type.</code> is probably not the most useful error message, but it’s still faster than switching back to the terminal or checking the console. The line number is generally enough to help you find the problem.</p>
+<h3>Summary</h3>
+<p>In this post, we</p>
+<ul>
+<li>setup up a <code class="inline">webpack.config.js</code> from scratch
+</li>
+<li><strong>understood</strong> every part of it
+</li>
+<li>learned how to use plugins (<code class="inline">HtmlWebpackPlugin</code>, <code class="inline">VueLoaderPlugin</code>)
+</li>
+<li>learned how to add <code class="inline">module rules</code>, to tell webpack how to pass certain files (<code class="inline">.vue</code>)
+</li>
+</ul>
+<p>The total code in <code class="inline">webpack.config.js</code> is less than 30 lines, and not that complex. We now have a good base for modern development environment.</p>
+<h3>Improvements</h3>
+<p>We can improve the webpack setup presented in a number of ways:</p>
+<ul>
+<li>add <code class="inline">babel-loader</code> to let us compile to ES5, to support old JavaScript (ew)
+</li>
+<li>add <code class="inline">babel-loader</code> to let us compile from ES7, ES8, and support new JavaScript (yay!)
+</li>
+<li>add <a href="https://github.com/webpack-contrib/uglifyjs-webpack-plugin">UgliyJsWebpackPlugin</a> and make our bundle even smaller for production
+</li>
+</ul>
+<p>And plenty more. A complex webpack config is daunting, but if you pull it into smaller pieces, each having a single, dedicated responsibility, suddenly it is’t so difficult to understand. If something is difficult to understand, such as webpack, break it down into smaller pieces, until it is easy to understand.</p>
+<p>The source code can be found <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/basic">here</a>.</p>
+
+  </div>
+</body>
+</html>
