@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    ActiveRecord and the Database
+  </h1>
+
+  <div class="post_body">
+    <p>If you do things the Rails Way, including using the standard table names that come with the migrations generated using <code class="inline">rails generate migration</code>, you barely need to think about the underlying database. If you are interfacing with an existing database, or your models and the corresponding tables have different names, it can be a little more tricky. Luckily, ActiveRecord lets us specify the table, keys, and so on in these situations.</p>
+<h3>A Quick Review of ActiveRecords’s has_many and belongs_to</h3>
+<p>Let’s look at a standard <code class="inline">has_many</code> and <code class="inline">belongs_to</code> relationship, using the Rails way:</p>
+<pre><code class="ruby lang-ruby language-ruby">rails generate model investor</code></pre>
+<p>Gives the following model and migration:</p>
+<pre><code class="ruby lang-ruby language-ruby">class Investor &lt; ApplicationRecord
+end</code></pre>
+<pre><code class="ruby lang-ruby language-ruby">class CreateInvestors &lt; ActiveRecord::Migration[5.1]
+  def change
+    create_table :investors do |t|
+
+      t.timestamps
+    end
+  end
+end</code></pre>
+<p>And the corresponding database table:</p>
+<pre><code class=" lang- language-">________________________________
+| id | created_at | updated_at |
+--------------------------------</code></pre>
+<p>We now want a <code class="inline">house</code> that <code class="inline">belongs_to</code> an <code class="inline">investor</code>. Of course, an <code class="inline">investor</code> <code class="inline">has_many</code> <code class="inline">houses</code>. We can do this in one go:</p>
+<pre><code class="sh lang-sh language-sh">rails generate model house investor:references</code></pre>
+<p>Which gives us:</p>
+<pre><code class="ruby lang-ruby language-ruby">class House &lt; ApplicationRecord
+  belongs_to :investor
+end</code></pre>
+<pre><code class="ruby lang-ruby language-ruby">class CreateHouses &lt; ActiveRecord::Migration[5.1]
+  def change
+    create_table :houses do |t|
+      t.references :investor, foreign_key: true
+
+      t.timestamps
+    end
+  end
+end</code></pre>
+<p>The corresponding table looks like this:</p>
+<pre><code class=" lang- language-">______________________________________________
+| id | investor_id | created_at | updated_at |
+----------------------------------------------</code></pre>
+<p>The Rails Way knows if we have a <code class="inline">belongs_to</code>, it will use the corresponding model’s name and append <code class="inline">_id</code> to create the foreign key. </p>
+<p>There is one part we have to do by hand, however. If we drop down into <code class="inline">rails console</code> and run:</p>
+<pre><code class="ruby lang-ruby language-ruby">Investor.new.houses</code></pre>
+<p>We get</p>
+<pre><code class=" lang- language-">NoMethodError: undefined method `houses&#39; for #&lt;Investor id: nil, created_at: nil, updated_at: nil&gt;</code></pre>
+<p>That’s because we need to add <code class="inline">has_many :houses</code> to the <code class="inline">investor</code> model:</p>
+<pre><code class="ruby lang-ruby language-ruby">class Investor &lt; ApplicationRecord
+  has_many :houses
+end</code></pre>
+<p>Now it works:</p>
+<pre><code class="ruby lang-ruby language-ruby">i = Investor.new.save
+i = Investor.first # load newly created investor
+
+i.first.houses.create
+#=&gt; #&lt;House id: 2, investor_id: 1, created_at: &quot;2018-05-01 07:31:06&quot;, updated_at: &quot;2018-05-01 07:31:06&quot;&gt;</code></pre>
+<p>However, what if the model had been called something other than <code class="inline">investor</code>, or the database table had a different name? Let’s build the able, using differently named models and tables, to see how to handle it.</p>
+<h3>Creating the Table</h3>
+<p>Instead of generating the migration along with model, we will start with just the migration. The tables will be called <code class="inline">existing_investors</code> and <code class="inline">existing_houses</code>.</p>
+<pre><code class="sh lang-sh language-sh">rails g migration create_existing_investor
+
+bin/rails db:migrate</code></pre>
+<p>Now the model:</p>
+<pre><code class="sh lang-sh language-sh">touch app/models/my_investor.ruby</code></pre>
+<pre><code class="ruby lang-ruby language-ruby">class MyInvestor &lt; ApplicationRecord
+
+end</code></pre>
+<p>Dropping into a <code class="inline">rails console</code> and running <code class="inline">MyInvestor.new</code> yields <code class="inline">ActiveRecord::StatementInvalid: Could not find table &#39;my_investors&#39;</code>.</p>
+<h3>Specifying the table</h3>
+<p>By default, Rails looks for a table which is the pluralized version of the model. We can specify another table name using <code class="inline">self.table_name</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class MyInvestor &lt; ApplicationRecord
+  self.table_name = &quot;existing_investors&quot;
+end</code></pre>
+<p>The same thing can be applied for the initial <code class="inline">my_house</code> model and <code class="inline">existing_houses</code> migration:</p>
+<pre><code class="sh lang-sh language-sh">rails g migration create_existing_house</code></pre>
+<pre><code class="ruby lang-ruby language-ruby">class CreateExistingHouse &lt; ActiveRecord::Migration[5.1]
+  def change
+    create_table :existing_houses do |t|
+
+      t.timestamps
+    end
+  end
+end</code></pre>
+<pre><code class="ruby lang-ruby language-ruby"># app/models/my_house.ruby
+class MyHouse &lt; ApplicationRecord
+
+end</code></pre>
+<p>Let’s add the <code class="inline">has_many</code> relationship first. Instead of houses, I want to call them <code class="inline">investments</code>.</p>
+<pre><code class="ruby lang-ruby language-ruby">class MyInvestor &lt; ApplicationRecord
+  self.table_name = &quot;existing_investors&quot;
+
+  has_many :investments
+end</code></pre>
+<p><code class="inline">rails console</code> gives us:</p>
+<pre><code class="ruby lang-ruby language-ruby">MyInvestor.first.investments
+#=&gt; NameError: uninitialized constant MyInvestor::Investment</code></pre>
+<p>Obviously, we don’t even have an <code class="inline">investments</code> model. Try using <code class="inline">class_name</code>: </p>
+<pre><code class="ruby lang-ruby language-ruby">has_many :investments, class_name: &#39;MyHouse&#39;</code></pre>
+<p>And we get a new error:</p>
+<pre><code class="ruby lang-ruby language-ruby">MyHouse Load (0.3ms)  SELECT  &quot;existing_houses&quot;.* FROM &quot;existing_houses&quot; WHERE &quot;existing_houses&quot;.&quot;my_investor_id&quot; = ? LIMIT ?  [[&quot;my_investor_id&quot;, 1], [&quot;LIMIT&quot;, 11]]
+
+ActiveRecord::StatementInvalid: SQLite3::SQLException: no such column: existing_houses.my_investor_id: SELECT  &quot;existing_houses&quot;.* FROM &quot;existing_houses&quot; WHERE &quot;existing_houses&quot;.&quot;my_investor_id&quot; = ? LIMIT ?</code></pre>
+<p><strong>no such column: existing_houses.my_investor_id</strong> is the important part. The logic goes like this:</p>
+<p><code class="inline">Investor</code> has_many <code class="inline">investments</code>. They are a model called <code class="inline">MyHouse</code>. So calling <code class="inline">investor.investments</code> looks to the <code class="inline">MyHouse</code> model, which in turn has a <code class="inline">class_name: &#39;existing_houses&#39;</code> - whcih leads to a database query for <code class="inline">existing_houses</code> with an <code class="inline">id</code> prefixed by the model’s table name, in this case <code class="inline">my_investor</code> - <code class="inline">my_investor_id</code>. </p>
+<p>We need to do <em>three</em> things:</p>
+<ol>
+<li>Create a foreign key column on the <code class="inline">existing_houses</code> column. Since the table is called <code class="inline">existing_investors</code>, I want it to be called <code class="inline">existing_investor_id</code>.
+</li>
+<li>Add <code class="inline">belongs_to</code> to <code class="inline">MyHouse</code>
+</li>
+<li>add a <code class="inline">foreign_key</code> to the <code class="inline">has_many</code> function in <code class="inline">MyInvestor</code>
+</li>
+</ol>
+<p>For the first step, we generate new migration:</p>
+<pre><code class="ruby lang-ruby language-ruby">class AddInvestorKeyToMyHouse &lt; ActiveRecord::Migration[5.1]
+  def change
+    change_table :existing_houses do |t|
+      t.references :existing_investor, foreign_key: true
+    end
+  end
+end</code></pre>
+<p><code class="inline">t.references :existing_investor</code> creates a key of the same name with <code class="inline">_id</code> appended - so <code class="inline">existing_investor_id</code>.</p>
+<p>For the second step, we can update <code class="inline">my_house.ruby</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class MyHouse &lt; ApplicationRecord
+  self.table_name = &quot;existing_houses&quot;
+
+  belongs_to :buyer, class_name: &quot;MyInvestor&quot;
+end</code></pre>
+<p>For the third, we update <code class="inline">MyHouse</code> as such:</p>
+<pre><code class="ruby lang-ruby language-ruby">class MyHouse &lt; ApplicationRecord
+  self.table_name = &quot;existing_houses&quot;
+
+  belongs_to :existing_investor, class_name: &quot;MyInvestor&quot;
+end</code></pre>
+<p>Great! Now we can do:</p>
+<pre><code class="ruby lang-ruby language-ruby">MyInvestor.first.investments.create!
+#=&gt; #&lt;MyHouse id: 3, created_at: &quot;2018-05-01 08:17:48&quot;, updated_at: &quot;2018-05-01 08:17:48&quot;, existing_investor_id: 1&gt;</code></pre>
+<p>Another nice thing Rails lets us to is customize the <code class="inline">belongs_to</code>, which can make the relationships between models more intuitive. Let’s change <code class="inline">belongs_to :existing_investor</code> to <code class="inline">belongs_to :buyer</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class MyHouse &lt; ApplicationRecord
+  self.table_name = &quot;existing_houses&quot;
+
+  belongs_to :buyer, class_name: &quot;MyInvestor&quot;, foreign_key: &quot;existing_investor_id&quot;
+end</code></pre>
+<p>And <code class="inline">MyInvestor.first.investments.create!</code> still works. Now we can type <code class="inline">MyHouse.last.buyer</code>, which is much more intuitive, and get:</p>
+<pre><code class="sh lang-sh language-sh">#=&gt; #&lt;MyInvestor id: 1, created_at: &quot;2018-05-01 07:39:21&quot;, updated_at: &quot;2018-05-01 07:39:21&quot;&gt;</code></pre>
+<p>RoR is not that trendy nowdays, but seeing the fantastic abstractions and power ActiveRecord deliverers out of the box, I still think RoR is the best way to build websites.</p>
+
+  </div>
+</body>
+</html>

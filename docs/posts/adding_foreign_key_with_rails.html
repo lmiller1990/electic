@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    Adding Foreign Key with Rails
+  </h1>
+
+  <div class="post_body">
+    <p>Rails makes it easy to add keys and indexes using migrations. Here is a quick example.</p>
+<p>Say we have two such models:</p>
+<pre><code class="ruby lang-ruby language-ruby">class File &lt; ActiveRecord
+  belongs_to :folder
+end
+
+class Folder &lt; ActiveRecord
+  has_many :files
+end</code></pre>
+<p>And the database is a from a legacy application, and has no keys. We can update it to have a foreign key and index easily.</p>
+<pre><code class="bash lang-bash language-bash">rails generate migration add_key_and_index</code></pre>
+<p>To add some more complexity, <code class="inline">File</code> has a <code class="inline">folder_id</code>, which should be related to the <code class="inline">Folder.id</code>.</p>
+<p>The migration looks like this. </p>
+<pre><code class="ruby lang-ruby language-ruby">class AddKeyToFiles &lt; ActiveRecord::Migration[5.1]
+  def change
+    add_foreign_key :files, :folders, column: :folder_id, index: true
+  end
+end</code></pre>
+<p>We can check if it worked by running <code class="inline">show indexes from files</code> in MySQL.</p>
+<p>To compare, before the migration we have:</p>
+<pre><code class="bash lang-bash language-bash">+---------------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+| Table         | Non_unique | Key_name | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment |
++---------------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+| storage_files |          0 | PRIMARY  |            1 | id          | A         |          84 |     NULL | NULL   |      | BTREE      |         |               |
++---------------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+</code></pre>
+<p>And after:</p>
+<pre><code class="bash lang-bash language-bash">+---------------+------------+---------------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+| Table         | Non_unique | Key_name            | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment |
++---------------+------------+---------------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+| storage_files |          0 | PRIMARY             |            1 | id          | A         |           0 |     NULL | NULL   |      | BTREE      |         |               |
+| storage_files |          1 | fk_rails_549951770a |            1 | folder_id   | A         |           0 |     NULL | NULL   | YES  | BTREE      |         |               |
++---------------+------------+---------------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+</code></pre>
+<p>Pretty difficult to read since the table wraps on most monitors, but you can see the key was added.</p>
+
+  </div>
+</body>
+</html>
