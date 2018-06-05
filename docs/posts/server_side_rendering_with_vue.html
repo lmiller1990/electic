@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    Server Side Rendering with Vue
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, I will continue on from the <a href="/posts/A_Webpack_Config_from_Scratch_For_Vue.html">work in my previous post</a>, where I set up a webpack config from scratch for Vue. I will now add support for server side rendering, with <code class="inline">vue-server-renderer</code>. </p>
+<p>Server side rendering is where the HTML for the application is constructed dynamically by the server using Node.js. The newly rendered HTML is then sent back in the response. This is in contrast to client side rendering, where JavaScript bundled by Webpack is to the client as is, where it is processed by the browser JavaScript engine. There are benefits to both approaches, which will not be discussed in this post.</p>
+<p>The source code can be found <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add_server_rendering">here</a>.</p>
+<h2>Splitting <code class="inline">webpack.config.js</code></h2>
+<p>A different webpack config is required, depending on whether the application is rendered on server or the client. We want to support both - for development, <code class="inline">webpack-dev-server</code> is a powerful tool, which delegates the processing and rendering to the client. In production, we will render on the server. A lot of the webpack config can be shared, such as <code class="inline">module</code>, where we declare <code class="inline">loaders</code>. Create a folder and two new files for the non unique webpack settings:</p>
+<pre><code class=" lang- language-">mkdir config &amp;&amp; touch config/client.js config/server.js</code></pre>
+<p>The current <code class="inline">webpack.config.js</code> contains four properties:</p>
+<ol>
+<li>entry
+</li>
+<li>module
+</li>
+<li>plugins
+</li>
+<li>dev-server
+</li>
+</ol>
+<p><code class="inline">module</code> contains the loading rules for <code class="inline">.vue</code> files, which both server and client rendering requires. The rest of the properties will be unique the client rendering, so move them to <code class="inline">config/client.js</code>:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+const HtmlWebpackPlugin = require(&quot;html-webpack-plugin&quot;)
+
+module.exports = {
+  entry: &quot;./src/index.js&quot;,
+
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, &quot;template.html&quot;)
+    })
+  ],
+
+  devServer: {
+    overlay: true
+  }
+}</code></pre>
+<p>Add a minimal setup in <code class="inline">config/server.js</code>:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+
+module.exports = {
+}</code></pre>
+<p>Also, move <code class="inline">template.html</code> into <code class="inline">config</code>: </p>
+<pre><code class=" lang- language-">mv template.html config/template.html</code></pre>
+<p><code class="inline">npm run dev</code> shoud still work.</p>
+<h2>Adding <code class="inline">webpack-merge</code></h2>
+<p>There is some duplication in <code class="inline">webpack.config.js</code> now. We have to join the base config and with client by typing</p>
+<pre><code class="js lang-js language-js">plugins: [
+  VueLoaderPlugin(), 
+  config.HtmlWebpackPlugin: ...
+]</code></pre>
+<p>When we add some server configuration, it will then look like:</p>
+<pre><code class="js lang-js language-js">plugins: [
+  VueLoaderPlugin(), 
+]
+
+if (development) 
+  plugins.push(HtmlWebpackPlugin)
+else if (production) 
+  plugins.push(some production only plugin...)</code></pre>
+<p>This gets confusing very quickly. There is a better way: <code class="inline">webpack-merge</code>, which will handle the merging for us.</p>
+<pre><code class=" lang- language-">npm install webpack-merge --save</code></pre>
+<p>Now use <code class="inline">webpack-merge</code> to clean up <code class="inline">webpack.config.js</code>:</p>
+<pre><code class="js lang-js language-js">const VueLoaderPlugin = require(&quot;vue-loader/lib/plugin&quot;)
+const merge = require(&quot;webpack-merge&quot;)
+const clientConfig = require(&quot;./config/client&quot;)
+const serverConfig = require(&quot;./config/server&quot;)
+
+const commonConfig = {
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: &quot;vue-loader&quot;
+      }
+    ]
+  },
+
+  plugins: [
+    new VueLoaderPlugin(),
+  ]
+}
+
+module.exports = mode =&gt; {
+  if (mode === &quot;development&quot;) {
+    return merge(commonConfig, clientConfig, {mode})
+  }
+
+  if (mode === &quot;production&quot;) {
+    return merge(commonConfig, serverConfig, {mode})
+  }
+}</code></pre>
+<p>Now <code class="inline">module.exports</code> returns a function. Webpack checks for the presence of a function exported from <code class="inline">webpack,config.js</code>, and if it is one, calls it with a <code class="inline">mode</code> argument. <code class="inline">mode</code>, oddly enough, corresponds to the <code class="inline">--env</code> argument, not <code class="inline">--mode</code>, so update the <code class="inline">scripts</code> section in <code class="inline">package.json</code>:</p>
+<pre><code class="js lang-js language-js">&quot;scripts&quot;: {
+  &quot;build&quot;: &quot;npx webpack --env production&quot;,
+  &quot;dev&quot;: &quot;npx webpack-dev-server --env development&quot;
+ }</code></pre>
+<p><code class="inline">npm run dev</code> should still be working fine. If you visit <code class="inline">localhost:8080</code>, inspect the source of the page (not using the devtools, the actual page source) you should see:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+&lt;script type=&quot;text/javascript&quot; src=&quot;main.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Notice the <code class="inline">msg</code>, <code class="inline">Hello</code> does not appear here - that is because it is rendered on the <em>client</em>. We will see a different page source when rendering on the server.</p>
+<h2>The server side <code class="inline">entry</code></h2>
+<p>The server rendering bundle will use a different entry point. Create a file for it:</p>
+<pre><code class=" lang- language-">touch src/create-app.js</code></pre>
+<p>This fuction will create the Vue app which we want to render. Add the following code:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import Hello from &quot;./Hello.vue&quot;
+
+export function createApp() {
+  return new Vue({
+    el: &quot;#app&quot;,
+    render: h =&gt; h(Hello)
+  })
+}</code></pre>
+<p>Look familiar? It is similar to the code in <code class="inline">src/index.js</code>. Take a look:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import Hello from &quot;./Hello.vue&quot;
+
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  new Vue({
+    el: &quot;#app&quot;,
+    
+    render: h =&gt; h(Hello)
+  })
+})</code></pre>
+<p>The difference is <code class="inline">document.addEventListener...</code>. <code class="inline">document</code> and the other Web APIs are not available in Node.js, which is why we need two different renderers. Refactor <code class="inline">src/index.js</code>:</p>
+<pre><code class="js lang-js language-js">import {createApp} from &quot;./create-app&quot;
+
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  createApp()
+})</code></pre>
+<p>Let’s try out new production config.</p>
+<pre><code class=" lang- language-">npm run build</code></pre>
+<pre><code class=" lang- language-">Built at: 2018-06-03 22:48:16
+  Asset      Size  Chunks             Chunk Names
+main.js  66.2 KiB       0  [emitted]  main
+Entrypoint main = main.js
+[0] (webpack)/buildin/global.js 489 bytes {0} [built]
+[2] ./src/create-app.js + 6 modules 4.59 KiB {0} [built]
+    | ./src/create-app.js 150 bytes [built]
+    | ./src/Hello.vue 1.05 KiB [built]</code></pre>
+<p>Looks good. Let’s see if we can use the module in a Node.js environment:</p>
+<pre><code class="js lang-js language-js">node
+&gt; const { createApp } = require(&quot;./dist/main&quot;)
+undefined
+&gt; createApp()
+TypeError: createApp is not a function
+&gt;</code></pre>
+<p>We have a problem.</p>
+<h2><code class="inline">output.library</code> and <code class="inline">output.libraryTarget</code></h2>
+<p>We need to set some <code class="inline">output</code> options in <code class="inline">config/server.js</code>. The documetation for <code class="inline">output</code> is <a href="https://webpack.js.org/configuration/output/">here</a>.</p>
+<p>We are interested in <code class="inline">library</code> and <code class="inline">libraryTarget</code>. The defaults are:</p>
+<pre><code class="js lang-js language-js">output: {
+  libraryTarget: &quot;var&quot;,
+  library: undefined
+}</code></pre>
+<p><code class="inline">var</code> means webpack will assign our exports to <code class="inline">var</code>, which are attached to the <code class="inline">window</code> object for use in the browser (a UMD. Since <code class="inline">library</code> is undefined, however, webpack simply does nothing. Although the variable isn’t assigned, in <code class="inline">src/index.js</code> we do:</p>
+<pre><code class="js lang-js language-js">document.addEvenListener(&quot;DOMContentLoaded&quot; ...)</code></pre>
+<p>So the Vue app still mounts. To get an idea of the options and what they do, run</p>
+<pre><code class=" lang- language-">mv dist/main.js dist/main_2.js</code></pre>
+<p>And try adding the following:</p>
+<pre><code class=" lang- language-">output: {
+  libraryTarget: &quot;var&quot;,
+  library: &quot;Bundle&quot;
+}</code></pre>
+<p>And run <code class="inline">npm run build</code>. Let’s compare the two:</p>
+<pre><code class=" lang- language-">diff dist/main.js dist/main_2.js
+
+&lt; var Bundle=function(t){var e={};function n(r){if(e[r])return...
+
+---
+
+&gt; !function(t){var e={};function n(r){if(e[r])return...</code></pre>
+<p>Now our bundle is assigned to a variable called <code class="inline">Bundle</code>. If you want, <code class="inline">cd dist &amp;&amp; python -m SimpleHTTPServer</code>, then in the browser console and check:</p>
+<pre><code class=" lang- language-">&gt; window.Bundle
+
+Module {
+  __esModule: true, 
+  Symbol(Symbol.toStringTag): &quot;Module&quot;
+}
+createApp: (...)Symbol(Symbol.toStringTag): &quot;Module&quot;
+__esModule: true
+get createApp: ƒ ()
+__proto__: Object
+
+&gt; Bundle.createApp
+
+ƒ s(){return new r.a({el:&quot;#app&quot;,render:t=&gt;t(a)})}</code></pre>
+<p>We want to execute in a Node.js environment. We we need to target <code class="inline">commonjs2</code>. Update <code class="inline">config/server.js</code>:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+
+module.exports = {
+  entry: &quot;./src/create-app.js&quot;,
+
+  output: {
+    libraryTarget: &quot;commonjs2&quot;
+  }
+}</code></pre>
+<p>And run <code class="inline">npm run build</code>. Let’s compare the outputs again with <code class="inline">diff dist/main.js dist/main_2.js</code></p>
+<pre><code class="js lang-js language-js">&lt; !function(t){var e={};function n(r){if(e[r])return...
+
+---
+
+&gt; &lt; module.exports=function(t){var e={};function n(r){if(e[r])return</code></pre>
+<p>Looks good! Now we have <code class="inline">module.exports</code>. We can check using Node:</p>
+<pre><code class=" lang- language-">node
+&gt; const {createApp} = require(&quot;./dist/main&quot;)
+&gt; createApp
+[Function: s]</code></pre>
+<p>There are other things you can pass to <code class="inline">library</code> and <code class="inline">libraryTarget</code> - find out more in the <a href="https://webpack.js.org/configuration/output/">documentation</a>.</p>
+<h2>Adding a server (express)</h2>
+<p>Now that we have a way to create the Vue app on the server, we need to serve it somehow. The easiest way to see this in action is with an express server. I personally like Rails better, and will go into that in a future article.</p>
+<p>Anyway, add <code class="inline">express</code>, and <code class="inline">vue-server-renderer</code></p>
+<pre><code class=" lang- language-">npm install express vue-server-renderer --save</code></pre>
+<p>Create a file for the server code with <code class="inline">touch src/server.js</code>.</p>
+<pre><code class="js lang-js language-js">const express = require(&quot;express&quot;)
+const renderer = require(&quot;vue-server-renderer&quot;).createRenderer()
+const {createApp} = require(&quot;../dist/main&quot;)
+
+const server = express()
+
+server.get(&quot;*&quot;, (req, res) =&gt; {
+  const app = createApp()
+
+  renderer.renderToString(app).then(html =&gt; {
+    res.end(html)
+  })
+})
+
+server.listen(8000, () =&gt; console.log(&quot;Started server on port 8000.&quot;))</code></pre>
+<p>There are two interesting parts here:</p>
+<pre><code class="js lang-js language-js">const renderer = require(&quot;vue-server-renderer&quot;).createRenderer()</code></pre>
+<p>Which instantiates an server renderer instance, and:</p>
+<pre><code class="js lang-js language-js">renderer.renderToString(app).then(html =&gt; {
+  res.end(html)
+})</code></pre>
+<p>Which takes our app, renders it and returns the markup as a string. All that is left is to serve the markup to the user. More info about Vue server renderer is <a href="https://ssr.vuejs.org/guide/#rendering-a-vue-instance">here</a>.</p>
+<p>We can try out by running:</p>
+<pre><code class=" lang- language-">npm run build &amp;&amp; node src/server.js</code></pre>
+<p>If everything it working, you can now visit <code class="inline">localhost:8000</code> and you should see the same old hello message. However, inspecting the element using the devtools shows:</p>
+<pre><code class=" lang- language-">&lt;div data-server-rendered=&quot;true&quot;&gt;Hello&lt;/div&gt;</code></pre>
+<p>Indicating it was rendered on the server. Let’s compare the page source to the client rendered source, shown earler:</p>
+<h3>client rendered:</h3>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+&lt;script type=&quot;text/javascript&quot; src=&quot;main.js&quot;&gt;&lt;/script&gt;&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<h3>server rendered:</h3>
+<pre><code class=" lang- language-">&lt;div data-server-rendered=&quot;true&quot;&gt;Hello&lt;/div&gt;</code></pre>
+<p>Notice <code class="inline">&lt;div app&gt;</code> is not shown anywhere? It is replaced when we we generate the markup using the server renderer, so all that is served is the actual markup.</p>
+<h2>Conclusion</h2>
+<p>In this article, we covered:</p>
+<ul>
+<li>the different environments webpack can target
+</li>
+<li>how to use <code class="inline">webpack-merge</code>
+</li>
+<li>how to user <code class="inline">library</code> and <code class="inline">libraryTarget</code>
+</li>
+<li>refactor and share code between the server and client
+</li>
+</ul>
+<h2>Improvments</h2>
+<p>Many improvements are left, which will be covered in the future, such as:</p>
+<ul>
+<li>hydrating the app on the server (server rendering using some dynamic data like the user id)
+</li>
+<li>routing (both client and server)
+</li>
+<li>use ES6 syntax, like <code class="inline">import</code> and <code class="inline">export</code> in Node.js with babel
+</li>
+</ul>
+<p>The source code can be found <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add_server_rendering">here</a>.</p>
+
+  </div>
+</body>
+</html>
