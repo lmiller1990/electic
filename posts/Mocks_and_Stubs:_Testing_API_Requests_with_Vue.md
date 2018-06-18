@@ -5,6 +5,8 @@ Almost all single page applications will make many calls to external services. I
 - Unit testing Vuex actions that use axios
 - End to end (e2e) testing using Cypress
 
+The source code for this project is available [here](https://github.com/lmiller1990/testing-api-requests-vue).
+
 We will start at the bottom of the [test pyramid](https://martinfowler.com/bliki/TestPyramid.html) with some unit tests, and finish up with some e2e tests.
 
 ### Setup
@@ -360,11 +362,11 @@ describe('My First Test', () => {
 
 Run the test with `npm run e2e`. Cypress has a great interface and is really easy to use. You should see:
 
-SS: cypress-ui
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/cypress-ui.png)
 
 Click 'run'. A Chrome browser should open and if everything went well, you should see:
 
-SS: e2e-passing
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-passing.png)
 
 It works! However, this test suffers from the original problem we had in the unit test we wrote - it is using a real network call. We want to __stub__ the network call, with a fake one, so we can consistently reproduce the same results without relying on a potentially flakey external API. To stub a response in Cypress, you need to do [two things](https://docs.cypress.io/guides/guides/network-requests.html#Stubbing):
 
@@ -395,11 +397,11 @@ describe('My First Test', () => {
 
 If you still have the Cypress server running, saving should automatically rerun the specs. Now we have a failure:
 
-SS: e2e-updated
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-updated.png)
 
 We can see on the right hand side that the stubbed response was rendered! Simply update the spec to assert the stubbed title is rendered and everything should be green again:
 
-SS: e2e-final
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-final.png)
 
 ### Conclusion and Improvements
 
@@ -411,5 +413,6 @@ Some improvements can be made, an are left an exercise:
 - Mock `axios` using Jest's [manual mocks](https://facebook.github.io/jest/docs/en/manual-mocks.html), where you create a `__mocks__` folder with a mock implementation of `axios` for use in your unit tests
 - Write a unit tests for `HelloWorld.vue` that mocks `axios` in the same way as `actions.spec.js`
 
-The source code is available here.
+The source code for this project is available [here](https://github.com/lmiller1990/testing-api-requests-vue).
+
 
