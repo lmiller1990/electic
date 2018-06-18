@@ -22,6 +22,7 @@
 <li>End to end (e2e) testing using Cypress
 </li>
 </ul>
+<p>The source code for this project is available <a href="https://github.com/lmiller1990/testing-api-requests-vue">here</a>.</p>
 <p>We will start at the bottom of the <a href="https://martinfowler.com/bliki/TestPyramid.html">test pyramid</a> with some unit tests, and finish up with some e2e tests.</p>
 <h3>Setup</h3>
 <p>Install the <code class="inline">vue-cli</code> with <code class="inline">npm install -g @vue/cli</code>, and then run <code class="inline">vue create api-tests</code>. Select “Manually select features” and choose the following:</p>
@@ -297,9 +298,9 @@ describe(&#39;My First Test&#39;, () =&gt; {
   })
 })</code></pre>
 <p>Run the test with <code class="inline">npm run e2e</code>. Cypress has a great interface and is really easy to use. You should see:</p>
-<p>SS: cypress-ui</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/cypress-ui.png" alt=""/></p>
 <p>Click ‘run’. A Chrome browser should open and if everything went well, you should see:</p>
-<p>SS: e2e-passing</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-passing.png" alt=""/></p>
 <p>It works! However, this test suffers from the original problem we had in the unit test we wrote - it is using a real network call. We want to <strong>stub</strong> the network call, with a fake one, so we can consistently reproduce the same results without relying on a potentially flakey external API. To stub a response in Cypress, you need to do <a href="https://docs.cypress.io/guides/guides/network-requests.html#Stubbing">two things</a>:</p>
 <ol>
 <li>Start a <code class="inline">cy.server</code>
@@ -325,9 +326,9 @@ describe(&#39;My First Test&#39;, () =&gt; {
   })
 })</code></pre>
 <p>If you still have the Cypress server running, saving should automatically rerun the specs. Now we have a failure:</p>
-<p>SS: e2e-updated</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-updated.png" alt=""/></p>
 <p>We can see on the right hand side that the stubbed response was rendered! Simply update the spec to assert the stubbed title is rendered and everything should be green again:</p>
-<p>SS: e2e-final</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-final.png" alt=""/></p>
 <h3>Conclusion and Improvements</h3>
 <p>We saw how to mock <code class="inline">axios</code> in a Vuex action spec, and how to stub the response using Cypress. With the advent of tools like Jest and Cypress, testing is extremely simple and actually makes development a lot more smooth one you are in the habit of writing tests. </p>
 <p>Some improvements can be made, an are left an exercise:</p>
@@ -339,7 +340,7 @@ describe(&#39;My First Test&#39;, () =&gt; {
 <li>Write a unit tests for <code class="inline">HelloWorld.vue</code> that mocks <code class="inline">axios</code> in the same way as <code class="inline">actions.spec.js</code>
 </li>
 </ul>
-<p>The source code is available here.</p>
+<p>The source code for this project is available <a href="https://github.com/lmiller1990/testing-api-requests-vue">here</a>.</p>
 
   </div>
 </body>
