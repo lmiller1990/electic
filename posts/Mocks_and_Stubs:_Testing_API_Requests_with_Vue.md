@@ -362,11 +362,11 @@ describe('My First Test', () => {
 
 Run the test with `npm run e2e`. Cypress has a great interface and is really easy to use. You should see:
 
-![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/cypress-ui.png)
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/cypress-ui.png?raw=true)
 
 Click 'run'. A Chrome browser should open and if everything went well, you should see:
 
-![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-passing.png)
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-passing.png?raw=true)
 
 It works! However, this test suffers from the original problem we had in the unit test we wrote - it is using a real network call. We want to __stub__ the network call, with a fake one, so we can consistently reproduce the same results without relying on a potentially flakey external API. To stub a response in Cypress, you need to do [two things](https://docs.cypress.io/guides/guides/network-requests.html#Stubbing):
 
@@ -397,11 +397,11 @@ describe('My First Test', () => {
 
 If you still have the Cypress server running, saving should automatically rerun the specs. Now we have a failure:
 
-![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-updated.png)
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-updated.png?raw=true)
 
 We can see on the right hand side that the stubbed response was rendered! Simply update the spec to assert the stubbed title is rendered and everything should be green again:
 
-![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-final.png)
+![](https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-final.png?raw=true)
 
 ### Conclusion and Improvements
 
@@ -414,5 +414,6 @@ Some improvements can be made, an are left an exercise:
 - Write a unit tests for `HelloWorld.vue` that mocks `axios` in the same way as `actions.spec.js`
 
 The source code for this project is available [here](https://github.com/lmiller1990/testing-api-requests-vue).
+
 
 
