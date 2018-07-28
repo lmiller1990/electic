@@ -9,7 +9,8 @@ defmodule Electic.Generators do
     posts = for file <- files do
       %Electic.Post{
         link: Utils.filename_to_link(file), 
-        title: Utils.filepath_to_pretty_name(file)
+        title: Utils.filepath_to_pretty_name(file),
+        intro: Utils.get_post_intro(file)
       }
     end
 

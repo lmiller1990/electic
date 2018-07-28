@@ -6,10 +6,15 @@
 </head>
 <link rel="stylesheet" href="index.css">
 <body>
-  <h3>Posts</h3>
   <%= for post <- posts do %>
     <a href="<%= post.link %>">
       <%= post.title%>
+    </a>
+
+    <div class="intro">
+      <%= post.intro %>
+    </div>
+    <br>
   <% end %>
 </body>
 </html>

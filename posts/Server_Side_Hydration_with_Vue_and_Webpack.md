@@ -1,4 +1,6 @@
-This article will continue on from my [previous post](https://itnext.io/setting-up-webpack-for-ssr-with-vue-b6ff9125d359), where we implemented basic server side rendering. Now we will add hydration. If the application relies on an external resource, for example data retreived from an external endpoint, the data needs to be fetched and resolved __before__ we call `renderer.renderToString`.
+This article will continue on from my post, setting up weback for ssr with Vue, where we implemented basic server side rendering. Now we will add hydration. 
+
+If the application relies on an external resource, for example data retreived from an external endpoint, the data needs to be fetched and resolved __before__ we call `renderer.renderToString`.
 
 The source code is available [here](https://github.com/lmiller1990/webpack-simple-vue/tree/add-hydration).
 

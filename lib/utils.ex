@@ -94,4 +94,11 @@ defmodule Electic.Utils do
   def remove_drafts files do
     Enum.filter(files, fn(x) -> !String.starts_with?(x, "[draft]") end)
   end
+
+  def get_post_intro(filepath) do
+    IO.puts filepath
+    {:ok, markdown} = File.read("posts/#{filepath}") 
+    String.split(markdown, "\n")
+    |> List.first
+  end
 end

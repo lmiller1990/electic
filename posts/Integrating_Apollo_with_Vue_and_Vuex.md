@@ -1,5 +1,3 @@
-# From GraphQL to Apollo
-
 My previous article discussed how to setup a simple GraphQL server and query it from a Vue frontend. For my personal projects, I believe this is adequate, however a more common solution in complex, production applications is a framework to bring some structure and extra features to your stack. Apollo is one such framework.
 
 To demonstrate how to use Apollo with Vue and Vuex, we will be building the following app:

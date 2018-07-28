@@ -1,6 +1,6 @@
-## Introduction 
+Regex is something I have always been slighly afraid of - long, intimidating and barely readable strings. Today was the day I learned regex, and started to use them to be more productive. 
 
-Regex is something I have always been slighly afraid of - long, intimidating and barely readable strings. However, today is the day I learn regex, and start to use them to be more productive. Most of the examples and resources I used come from [RegexOne](https://regexone.com).
+Most of the examples and resources I used come from [RegexOne](https://regexone.com).
 
 ### Basic Matching
 

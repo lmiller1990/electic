@@ -1,6 +1,6 @@
-### Getting started with Google Analytics events
+Recently I became more interested in how users are interacting with my sites. Google Analytics is a great tool for tracking this kind of data.
 
-Recently I became more interested in **how** users are interacting with my sites. I want to know what features they are using, or not using, or having trouble with. This will let me spend my time most optimally.
+I want to know what features they are using, or not using, or having trouble with. This will let me spend my time most optimally.
 
 I will make a simple test application in Rails, and get up Google Analytics events. When a button is clicked, I want to record the button clicked, and some additional data.
 
