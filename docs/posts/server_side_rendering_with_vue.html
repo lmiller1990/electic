@@ -14,7 +14,8 @@
   </h1>
 
   <div class="post_body">
-    <p>In this article, I will continue on from the <a href="https://lmiller1990.github.io/electic/posts/a_webpack_config_from_scratch_for_vue.html">work in my previous post</a>, where I set up a webpack config from scratch for Vue. I will now add support for server side rendering, with <code class="inline">vue-server-renderer</code>. </p>
+    <p>In this article, I will continue on from the a webpack config from scratch for Vue, where I set up a webpack config from scratch for Vue. I will now add support for server side rendering, with <code class="inline">vue-server-renderer</code>. </p>
+<p>This previous post is <a href="https://lmiller1990.github.io/electic/posts/a_webpack_config_from_scratch_for_vue.html">here</a>.</p>
 <p>Server side rendering is where the HTML for the application is constructed dynamically by the server using Node.js. The newly rendered HTML is then sent back in the response. This is in contrast to client side rendering, where JavaScript bundled by Webpack is to the client as is, where it is processed by the browser JavaScript engine. There are benefits to both approaches, which will not be discussed in this post.</p>
 <p>The source code can be found <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add_server_rendering">here</a>.</p>
 <h2>Splitting <code class="inline">webpack.config.js</code></h2>

@@ -1,6 +1,6 @@
-Testing API calls with Vuex and Axios
+Almost all single page applications will make many calls to external services, so testing those parts of your applications is important. 
 
-Almost all single page applications will make many calls to external services. I will discuss how to test API calls, specifically:
+I will discuss how to test API calls, specifically:
 
 - Unit testing Vuex actions that use axios
 - End to end (e2e) testing using Cypress

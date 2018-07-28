@@ -1,8 +1,6 @@
-Detecting and Outline Lakes with Python3 and OpenCV 3
+In the article, I will go over some basic shape and contour detection using Python3 and OpenCV to identify a lake in a given screen capture from Google Maps.
 
-In the article, I will go over some basic shape and contour detection using Python3 and OpenCV.
-
-The source code for this article can be found [here](https://github.com/lmiller1990/python-opencv-lake-recognition).
+The source code for this article can be found [here](https://github.com/lmiller1990/python-opencv-lake-recognition). This was written on the 28th of July, 2018.
 
 ## Goal
 

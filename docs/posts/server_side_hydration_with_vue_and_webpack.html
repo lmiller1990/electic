@@ -14,7 +14,8 @@
   </h1>
 
   <div class="post_body">
-    <p>This article will continue on from my <a href="https://itnext.io/setting-up-webpack-for-ssr-with-vue-b6ff9125d359">previous post</a>, where we implemented basic server side rendering. Now we will add hydration. If the application relies on an external resource, for example data retreived from an external endpoint, the data needs to be fetched and resolved <strong>before</strong> we call <code class="inline">renderer.renderToString</code>.</p>
+    <p>This article will continue on from my post, setting up weback for ssr with Vue, where we implemented basic server side rendering. Now we will add hydration. </p>
+<p>If the application relies on an external resource, for example data retreived from an external endpoint, the data needs to be fetched and resolved <strong>before</strong> we call <code class="inline">renderer.renderToString</code>.</p>
 <p>The source code is available <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add-hydration">here</a>.</p>
 <p>For this example, we will fetch a post from <a href="https://jsonplaceholder.typicode.com/posts/1">JSONPlaceholder</a>. The data looks like this:</p>
 <pre><code class="json lang-json language-json">{

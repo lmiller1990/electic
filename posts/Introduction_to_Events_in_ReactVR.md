@@ -1,5 +1,3 @@
-## Introduction
-
 ReactVR is an exciting new way to build 3D and VR environments, which can be easily deployed and accessed in a browser. One of the first things you will want to do in any web app is allow the user to interact with your creation. This leads to the topic of this post, handling events in ReactVR.
 
 The source code for this article is [here](https://github.com/lmiller1990/react-vr-events-examples).

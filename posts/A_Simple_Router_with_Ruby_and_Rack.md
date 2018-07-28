@@ -1,6 +1,6 @@
-### A router from scratch with Rack and Ruby
+Rack is the web server that powers many Ruby web frameworks, including Rails. Let's see how you can make your own simple HTTP router, using Rack.
 
-Today I followed a guide by Adam Gamble about how to build a router for Rack, the class Ruby web server. The guide is [here](https://isotope11.com/blog/build-your-own-web-framework-with-rack-and-ruby-part-2).
+This is based on a guide I followed by Adam Gamble about how to build a router. The guide is [here](https://isotope11.com/blog/build-your-own-web-framework-with-rack-and-ruby-part-2).
 
 ## Rack Basics
 
