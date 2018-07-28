@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    Detecting and Outlining Lakes wihth Python 3 and OpenCV 3
+  </h1>
+
+  <div class="post_body">
+    <p>Detecting and Outline Lakes with Python3 and OpenCV 3</p>
+<p>In the article, I will go over some basic shape and contour detection using Python3 and OpenCV.</p>
+<p>The source code for this article can be found <a href="https://github.com/lmiller1990/python-opencv-lake-recognition">here</a>.</p>
+<h2>Goal</h2>
+<p>The goal is to detect the largest body of water and calculate the radius and approximate area, given screen capture from Google Maps. The article introduces some code that, given a screen capture, detects the largest body of water and draws a line around the edge: </p>
+<p><img src="https://github.com/lmiller1990/python-opencv-lake-recognition/blob/master/result.png?raw=true" alt="final_result"/></p>
+<h2>Setup</h2>
+<p>I will use Python3 and OpenCV3. There are many ways to install Python3, I used <a href="https://anaconda.org/anaconda/python">conda</a>. I installed OpenCV using homebrew by running <code class="inline">brew install opencv</code>. </p>
+<p>To check if opencv was installed, create a <code class="inline">detector.py</code> script and add the following:</p>
+<pre><code class="python lang-python language-python">import cv2 as cv
+import numpy as np
+print(cv.__version__)
+print(np.__version__)</code></pre>
+<p>And run with <code class="inline">python3 detector.py</code>. My output is:</p>
+<pre><code class="sh lang-sh language-sh">3.4.2
+1.15.0</code></pre>
+<p>Prior to the above output, I got an error regarding numpy. The fix was to reinstalling numpy using homebrew.</p>
+<h2>Basic Thresholding using inRange</h2>
+<p>The next step is to apply a threshold, and get rid of the data we are not interested in. Since we are using Google Maps, lakes are always the same shade of blue, which makes things simple.</p>
+<p>Lakes have an RGB color of <code class="inline">[170, 218, 255]</code>. OpenCV uses a different ordering, BGR. </p>
+<p><img src="https://github.com/lmiller1990/python-opencv-lake-recognition/blob/master/color.png?raw=true" alt="color"/></p>
+<p>We will use <code class="inline">cv.inRange</code> function, which takes three arguments: an image, a lower color range, and an upper color range. The documentation is <a href="https://docs.opencv.org/2.4/modules/core/doc/operations_on_arrays.html#inrange">here</a>. Based on trial and error, I found +-10 for the ranges work well.</p>
+<p>Update the script:</p>
+<pre><code class="python lang-python language-python"># Color of a lake [blue green red]
+BGR = np.array([255, 218, 170])
+upper = BGR + 10
+lower = BGR - 10</code></pre>
+<p>Now add two functions: <code class="inline">read_image</code>, to get the image we will be operating on, and <code class="inline">find_mask</code>, which applies the thresholding with <code class="inline">inRange</code>.</p>
+<pre><code class="python lang-python language-python">def read_image(path):
+    return cv.imread(path)
+
+def find_mask(image):
+    return cv.inRange(image, lower, upper)</code></pre>
+<p>Before displaying the thresholded image, it’s good to understand what <code class="inline">cv.imread</code> returns. Add the following code: </p>
+<pre><code class="python lang-python language-python">if __name__ == &quot;__main__&quot;:
+    image = read_image(&quot;pond.png&quot;)
+    print(len(image), len(image[0]), image[0])
+    key = cv.waitKey(0)</code></pre>
+<p>I saved my screen capture as “pond.png”. Running the above code with <code class="inline">python3 detector.py</code> prints the following:</p>
+<pre><code class="sh lang-sh language-sh">596 697 [225 230 232]</code></pre>
+<p>596 is the height of the image, or the number of rows. Each row in an array containing 697 values, where each value is a 1x3 matrix contains [B, G, R] values. So an image is just a collection of BGR pixels.</p>
+<p><code class="inline">inRange</code> is similar, however instead of each pixel being mapped to a BGR value, is it simply assigned a value of 0 or 1 - whether or not it is between the threshold.</p>
+<p>Try rendering the mask with this code:</p>
+<pre><code class="python lang-python language-python">if __name__ == &quot;__main__&quot;:
+    image = read_image(&quot;pond.png&quot;)
+    print(len(image), len(image[0]), image[0][0])
+    mask = find_mask(image)
+    print(len(mask), len(mask[0]), mask[0])
+    cv.imshow(&quot;Mask&quot;, mask)
+    key = cv.waitKey(0)</code></pre>
+<p><img src="https://github.com/lmiller1990/python-opencv-lake-recognition/blob/master/mask.png?raw=true" alt="mask"/></p>
+<p>The output confirms <code class="inline">inRange</code> returns an array of 0 or 1 for each pixel:</p>
+<pre><code class="sh lang-sh language-sh">596 697 [225 230 232]
+596 697 [0 0 0 0 0 0 0 ...... ]</code></pre>
+<h2>Finding Contours with <code class="inline">findContours</code></h2>
+<p>OpenCV has a <code class="inline">findContours</code> function which can find edges in a binary image. We have a binary image - that’s why we created the mask. Read about <code class="inline">findContours</code> in the documentation <a href="https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?#findcontours">here</a>. The arguments are:</p>
+<ul>
+<li><code class="inline">image</code>: the binary image to use. <code class="inline">findContours</code> modifies the image, so we should pass in a copy
+</li>
+<li><code class="inline">mode</code>: the contour retrieval mode. The modes are described in the documentation. We are focusing on the largest area, so the best fit for this problem is <code class="inline">CV_RETR_EXTERNAL</code>
+</li>
+<li><code class="inline">method</code>: the contour approximation method. Again, described in the documentation. I don’t really understand which is the best fit for this problem, so I just used <code class="inline">CHAIN_APPROX_SIMPLE</code> since this is a simple problem and that method has simple in the name. <code class="inline">¯\_(ツ)_/¯</code>
+</li>
+</ul>
+<p>Now we know about <code class="inline">findContours</code>, we can write the following function:</p>
+<pre><code class="python lang-python language-python">def find_contours(mask):
+    (_, cnts, hierarchy) = cv.findContours(
+            mask.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+    print(&quot;Found %d black shapes&quot; % (len(cnts)))
+    return cnts</code></pre>
+<p><code class="inline">findContours</code> returns three values. The first appears to be the image modified by <code class="inline">findContours</code>, which we don’t really need. The second is the contours that were found. The last is the hierarchy, which contains information about the image topology. I don’t fully understand what this can be used for yet. We only want the second value, <code class="inline">cnts</code>.</p>
+<p>Running the <code class="inline">find_contours</code> function and passing in the <code class="inline">mask</code> from earlier prints <code class="inline">Found 93 black shapes</code>. This is counting all the small bodies of water, or other blue pixels, in the image. Not ideal for now. We will fix this soon. </p>
+<h2>Drawing Contours using <code class="inline">drawContours</code></h2>
+<p>Let’s go ahead and create a <code class="inline">show_contours</code> function to visualize the 93 contours, using OpenCV’s <code class="inline">drawContours</code> function, described <a href="https://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?#drawcontours">here</a>. The arguments are:</p>
+<ul>
+<li>image: the image to draw on
+</li>
+<li>contours: an array of contour to draw. A contour is an array of points
+</li>
+<li>contour_index: the index of the contour to draw. For now we will pass -1, which draws all the contours
+</li>
+<li>color: the color to draw the contours. I will use red: <code class="inline">0, 0, 255</code>
+</li>
+<li>thickness: the thickness of the contours drawn. I found 2 was a good number
+</li>
+</ul>
+<p>Now we know the parameters, we can implement <code class="inline">show_contours</code>:</p>
+<pre><code class="python lang-python language-python">def show_contours(contours, image):
+    cv.drawContours(image, contours, -1, (0, 0, 255), 2)
+
+    cv.imshow(&quot;contours&quot;, image)</code></pre>
+<p>Using this with <code class="inline">find_contours</code> gives us the following:</p>
+<pre><code class="python lang-python language-python">contours = find_contours(mask)
+show_contours(contours, image)</code></pre>
+<p><img src="https://github.com/lmiller1990/python-opencv-lake-recognition/blob/master/all_contours.png?raw=true" alt="all_contours"/></p>
+<h2>Extracting the Largest Body of Water</h2>
+<p>We have 93 contours, as shown above in the image. We only want the largest one, which is the one with the most points. Add a <code class="inline">main_contour</code> function:</p>
+<pre><code class="python lang-python language-python">def get_main_contour(contours):
+    copy = contours.copy()
+    copy.sort(key=len, reverse=True)
+    return copy[0]</code></pre>
+<p>We simply sort the <code class="inline">contours</code> by length and return the longest one. Bringing it all together:</p>
+<pre><code class="python lang-python language-python">if __name__ == &quot;__main__&quot;:
+    image = read_image(&quot;pond.png&quot;)
+    mask = find_mask(image)
+
+    contours = find_contours(mask)
+    main_contour = get_main_contour(contours) 
+    show_contours([main_contour], image)
+
+    key = cv.waitKey(0)</code></pre>
+<p><img src="https://github.com/lmiller1990/python-opencv-lake-recognition/blob/master/final.png?raw=true" alt="final"/></p>
+<p>Great.</p>
+<h2>Conclusion</h2>
+<p>This article described:</p>
+<ul>
+<li>how to use <code class="inline">inRange</code> to threshold and make a mask
+</li>
+<li>finding contours using <code class="inline">findContours</code> and the arguments it takes
+</li>
+<li>showing the contours with <code class="inline">drawContours</code>
+</li>
+</ul>
+<p>This was my first time doing image recognition in a long time. My previous experience was using OpenCV with C++, and I am impressed at how much easier and more approachable it has become with the Python bindings. I learned a lot reading <a href="https://www.pyimagesearch.com/2014/10/20/finding-shapes-images-using-python-opencv/">Py Image Search</a>, and it is a great resources web developers looking to try out Python and image recognition.</p>
+<p>The source code for this article can be found <a href="https://github.com/lmiller1990/python-opencv-lake-recognition">here</a>.</p>
+
+  </div>
+</body>
+</html>
