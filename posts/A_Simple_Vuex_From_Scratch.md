@@ -104,3 +104,69 @@ document.addEventListener("DOMContentLoaded", () => {
 ```
 
 If everything went well, you should see 0 rendered!
+
+## Implementing Mutations
+
+Now the store has a `state`, but no way to update it. Let's implement mutations. First, update the `constructor` to receive a `mutations` object:
+
+```js
+class Store {
+  // ...
+
+  constructor({ state, mutations }) {
+    this.mutations = mutations
+
+    // ...
+  }
+
+  // ...
+}
+```
+
+Create an `increment` mutation and pass it to the instance of the store:
+
+```js
+// ...
+document.addEventListener("DOMContentLoaded", () => {
+  const mutations = {
+    increment(state, { amount }) {
+      state.count = state.count + amount
+    }
+  }
+
+  const store = new Store({ state: { count: 0 }, mutations })
+ 
+   // ...
+})
+```
+
+Now we need a way to call the mutation. Add a `commit` method to the `Store` class:
+
+```js
+commit(handler, payload) {
+  this.mutations[handler](this.state, payload)
+}
+```
+
+This will get the correct mutations using the `handler`, and pass the state and payload as arguments. For example, `commt('increment', { amount: 1 })` will call `mutations['increment
+']`, pass in the current `state` and the payload.
+
+The last thing to do is update the `template` to actually commit a mutation:
+
+```js
+window.app = new Vue({ 
+  el, 
+  store,
+  template: `
+    <div>
+      {{ $store.state.count }}
+      <button @click="$store.commit('increment', { amount: 1 })">
+        Increment
+      </button>
+    </div>
+  `
+})
+```
+
+If you did everything correctly, click the button should increment `count` by 1.
+
