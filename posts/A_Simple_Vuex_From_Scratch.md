@@ -1,5 +1,7 @@
 Build a simple Vuex implementation from scratch, in just 40 lines of code, complete with a reactivite state and mutations.
 
+The source code for this implementation is so minimal in can be found in an entire gist, located [here](https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b). Published on 6/8/2018.
+
 ## Creating a global `store` object
 
 Let's start by fleshing out the public API. We will let a user register the store using `Vue.use(Store)`. The actual store will be created using `new Store`, that takes an initial state and an object containing mutations. 
@@ -170,3 +172,12 @@ window.app = new Vue({
 
 If you did everything correctly, click the button should increment `count` by 1.
 
+## Conclusion
+
+This article covered a lot of interesting things:
+
+- using `install` to initialize a plugin, and extend child components with `Vue.mixin`
+- accessing an object passed to a newly created `Vue` instance with `this.$options.store`
+- using a JavaScript `getter` to return a specific object when a property is accessed
+
+The source code for this implementation is so minimal in can be found in an entire gist, located [here](https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b).
