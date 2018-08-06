@@ -1,4 +1,4 @@
-Build a simple Vuex implementation from scratch, in just 40 lines of code, complete with a reactivite state and mutations.
+Build a simple Vuex implementation from scratch, in just 40 lines of code, complete with a reactive state and mutations.
 
 The source code for this implementation is so minimal in can be found in an entire gist, located [here](https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b). Published on 6/8/2018.
 
@@ -15,7 +15,7 @@ new Vue({
 })
 ```
 
-Values or objects passed to a Vue instance using the above syntaxc are exposed by `this.$options`. We can access the store by using `this.$options.store`, then assign it to a global `$store` object in the `beforeCreate` lifecycle method. Create a `store.js` file and add the following:
+Values or objects passed to a Vue instance using the above syntax are exposed by `this.$options`. We can access the store by using `this.$options.store`, then assign it to a global `$store` property in the `beforeCreate` lifecycle method. Create a `store.js` file and add the following:
 
 ```js
 class Store {
@@ -29,9 +29,9 @@ class Store {
 }
 ```
 
-By using a `mixin`, all child Vue components will have the store mixed in to their instance and available using `$store`.
+By using a `mixin`, all child Vue components will have the store added to their instance and made available using `$store`.
 
-Let's try it out with Vue. Creating the following html:
+Let's try it out with Vue. Creating the following `index.html`:
 
 ```html
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.17/vue.js"></script>
@@ -53,11 +53,11 @@ document.addEventListener("DOMContentLoaded", () => {
 })
 ```
 
-`console.log(app.$store)` should show a empty `Store` object.
+Open `index.html`, and `console.log(app.$store)` should show a empty `Store` object.
 
 ## Adding a reactive global state
 
-Now we have a global store object, let's add the state. First, update the `store` class to have a constructor that receives an object containing a `state` object. We will take advantage of the fact that all Vue components share the same `data` as the original Vue instance, and assign the `state` to a `$$state` variable. The `$$` simply represents a private variable - since Vue uses `$` to denote values attached to the prototype, I am using `$$` to simply convey this is a not part of the public API for the library.
+Now we have a global store object, let's add the state. First, update the `store` class, adding a constructor that receives an object containing a `state` property. We will take advantage of the fact that all Vue components share the same `data` as the original Vue instance, and assign the `state` to a `$$state` variable. The `$$` simply represents a private variable - since Vue uses `$` to denote values attached to the prototype, I am using `$$` to simply convey this is a not part of the library's public API.
 
 ```js
 class Store {
@@ -72,7 +72,7 @@ class Store {
 }
 ```
 
-Lastly, when the user calls `$store.state`, we should return `$$state`. We can do so using a JavaScript `getter`:
+Lastly, when the user calls `$store.state`, we should return the `$$state` we just assigned. We can do so using a JavaScript `getter`:
 
 ```
 class Store {
@@ -84,7 +84,7 @@ class Store {
 }
 ```
 
-Update the minimal Vue app so thestore instance receives a base state, and the Vue app has a template that renders the state:
+Update the minimal Vue app so the store instance receives an initial state, and the Vue app has a template that renders the state:
 
 ```js
 document.addEventListener("DOMContentLoaded", () => {
@@ -109,7 +109,7 @@ If everything went well, you should see 0 rendered!
 
 ## Implementing Mutations
 
-Now the store has a `state`, but no way to update it. Let's implement mutations. First, update the `constructor` to receive a `mutations` object:
+Now the store has a `state`, but no way to update it. Let's implement mutations. First, update the `constructor` to receive `mutations`:
 
 ```js
 class Store {
@@ -150,8 +150,7 @@ commit(handler, payload) {
 }
 ```
 
-This will get the correct mutations using the `handler`, and pass the state and payload as arguments. For example, `commt('increment', { amount: 1 })` will call `mutations['increment
-']`, pass in the current `state` and the payload.
+This will get the correct mutations using the `handler`, and pass the state and payload as arguments. For example, `commit('increment', { amount: 1 })` will call `mutations['increment']`, passsing the `state` and the `payload`.
 
 The last thing to do is update the `template` to actually commit a mutation:
 
@@ -179,5 +178,7 @@ This article covered a lot of interesting things:
 - using `install` to initialize a plugin, and extend child components with `Vue.mixin`
 - accessing an object passed to a newly created `Vue` instance with `this.$options.store`
 - using a JavaScript `getter` to return a specific object when a property is accessed
+
+I did not implement `actions`, but doing so is similar to mutations. You probably want to return a `Promise`, and perhaps use `bind` and pass a reference to `commit`, so you can update the state from an action by committing a mutation.
 
 The source code for this implementation is so minimal in can be found in an entire gist, located [here](https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b).
