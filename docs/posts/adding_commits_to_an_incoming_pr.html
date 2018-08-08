@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    Adding Commits to an Incoming PR
+  </h1>
+
+  <div class="post_body">
+    <p>One of my projects starting getting some PRs recently - I learned how to add their branches as remotely, and add and push commits to them.</p>
+<h2>The PR</h2>
+<p>I am working on a project called Vue Testing Handbook. You can view it at <a href="https://lmiller1990.github.io/vue-testing-handbook/">here</a>. Recently <a href="https://github.com/lmiller1990/vue-testing-handbook/pull/59">this</a> PR was made. Sometimes I like to do some minor formatting before merging.</p>
+<h2>Adding as a Remote</h2>
+<p>The first thing I need to do if I want to add some commits to this PR is add the other user’s repository as a remote. His repository url is https://github.com/superyusuke/vue-testing-handbook.git. I can add it under any name I like. I’ll use <code class="inline">yusuke</code>. So, to add the repo I can run</p>
+<pre><code class="sh lang-sh language-sh">git remote add yusuke https://github.com/superyusuke/vue-testing-handbook.git</code></pre>
+<p>I can view a list of my remote repositories by running <code class="inline">git remote</code>. I get the following: </p>
+<pre><code class=" lang- language-">alex
+fork
+origin
+yusuke</code></pre>
+<p>Looks like it’s working. I can actually fetch all his branches using <code class="inline">git fetch yusuke</code>.</p>
+<h2>Checking Out the Branch</h2>
+<p>Next I want to check his branch out. I will make a new branch, forked from his. I can do this by running <code class="inline">git checkout -b yusuke-vuex-update yusuke/japanese/testing-vuex</code>. The output is <code class="inline">Branch &#39;yusuke-vuex-update&#39; set up to track remote branch &#39;japanese/testing-vuex&#39; from &#39;yusuke&#39;</code>. This new branch is <strong>tracking</strong> the remote. <a href="https://stackoverflow.com/questions/4693588/git-what-is-a-tracking-branch">This</a> Stack Overflow explains it well. Simply put:</p>
+<blockquote><p>A ‘tracking branch’ in Git is a local branch that is connected to a remote branch. When you push and pull on that branch, it automatically pushes and pulls to the remote branch that it is connected with.</p>
+</blockquote>
+<p>That means if I commit and push anything to my local <code class="inline">yusuke-vuex-update</code>, git knows which remote repo and branch to push to. In this case, that will be the branch that is making the PR against my repo.</p>
+<h2>Pushing to the Remote</h2>
+<p>After I made my changes locally on <code class="inline">yusuke-vuex-update</code>, I committed them and ran <code class="inline">git push</code>. I got the following message:</p>
+<pre><code class="sh lang-sh language-sh">fatal: The upstream branch of your current branch does not match
+the name of your current branch.  To push to the upstream branch
+on the remote, use
+
+    git push yusuke HEAD:japanese/testing-vuex
+
+To push to the branch of the same name on the remote, use
+
+    git push yusuke yusuke-vuex-update
+
+To choose either option permanently, see push.default in &#39;git help config&#39;.</code></pre>
+<p>I want my new commits to be on the same branch - that is, I want them to become the new <code class="inline">HEAD</code>. The second option would create a new branch, which is not what I want. So I run <code class="inline">git push yusuke HEAD:japanese/testing-vuex</code>. It works.</p>
+<h2>Conclusion</h2>
+<ul>
+<li><p>You add a remote repo by typing <code class="inline">git remote add [remote-name-to-use-locally] [remote-url]</code></p>
+</li>
+<li><p>A full example is <code class="inline">git remote add yusuke https://github.com/superyusuke/vue-testing-handbook.git</code></p>
+</li>
+<li><p>Checkout a remote branch with <code class="inline">git checkout -b [new-local-branch-name] [remote-name-to-use-locally]/[remote-branch]</code></p>
+</li>
+<li><p>A full example is <code class="inline">git checkout -b update-yusuke-testing-vuex yusuke/japanese/testing-vuex</code>.</p>
+</li>
+<li><p>This sets up a local branch which is <strong>tracking</strong> the remote</p>
+</li>
+<li><p>When a local branch his tracking a remote branch, git knows which remote repoistory and branch to push any commits to</p>
+</li>
+<li><p>To push to a remote from a tracking branch, you can run <code class="inline">git push [remote-name-to-use-locally] HEAD:[remote-branch]</code></p>
+</li>
+<li><p>Aa full example is <code class="inline">git push yusuke HEAD:japanese/testing-vuex</code></p>
+</li>
+</ul>
+
+  </div>
+</body>
+</html>
