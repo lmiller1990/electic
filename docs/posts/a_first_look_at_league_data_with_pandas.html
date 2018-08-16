@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    A First Look at League Data with Pandas
+  </h1>
+
+  <div class="post_body">
+    <p>I wanted to learn more about pandas, a popular Python data handling library, and to motivate myself, I used the League of Legends dataest provided by Oracle’s Elixir to do some simple data handling. This was written on the 16th of August, 2018.</p>
+<p>The data can be found <a href="http://oracleselixir.com/match-data/">here</a>.</p>
+<h2>Introduction</h2>
+<p>The goal will be to create a function that can display the games a team played, the opponent, and some useful information. The challnge comes from the fact that each row presents data from a single team’s point of view. The data is effectively duplicated again from the opponent’s view. For example, a single row looks like:’</p>
+<pre><code class=" lang- language-">| gameid | date | week | gamelength | ... |</code></pre>
+<p>But no <code class="inline">opponent</code> field. We can get the <code class="inline">opponent</code> by joining on the <code class="inline">gameid</code> field.</p>
+<h2>Getting the Team’s Games</h2>
+<p>Let’s start by getting all the <code class="inline">gameid</code> that relevant to a team, which we will pass as a command line argument. The program will run like this: <code class="inline">python3 team_games.py &quot;Team Liquid&quot;</code>.</p>
+<pre><code class="python lang-python language-python">import sys
+import pandas as pd
+
+team = sys.argv[1]
+df = pd.read_csv(&quot;data.csv&quot;)
+
+fields = &#39;gameid date week game team side gamelength result teamkills teamdeaths&#39;.split()
+team_games = df[df[&#39;team&#39;] == team].drop_duplicates(subset=[&#39;gameid&#39;])[fields]
+team_game_ids = team_games[&#39;gameid&#39;]</code></pre>
+<p><code class="inline">data.csv</code> is the data from Oracle’s Elixir. It is an excel spreadsheet, so I had to open it, then export is as a <code class="inline">.csv</code> file, so I could read it using pandas.</p>
+<p>We startt by getting any games where the <code class="inline">team</code> column is the team we passed in as the first argument. Each game is displayed 10 times, once for each player on each team. We don’t care about individual players for this program, so we drop any duplicated <code class="inline">gameid</code> rows using <code class="inline">drop_duplicates</code> and passing the <code class="inline">gameid</code> as a subset. Next we grab just the <code class="inline">gameid</code> column. This will be useful for performing the join later.</p>
+<h2>Get the Team’s Opponents</h2>
+<p>Now we will get all rows that were in any of the games played by the team. This will include the opponents:</p>
+<pre><code class="pythong lang-pythong language-pythong">games = df.loc[df[&#39;gameid&#39;].isin(team_game_ids)]
+unique_fields = [&#39;gameid&#39;]
+opponents = games[games[&#39;team&#39;] != team].drop_duplicates(subset=unique_fields)[[&#39;gameid&#39;, &#39;team&#39;]]
+opponents.columns = [&#39;gameid&#39;, &#39;opponent&#39;]</code></pre>
+<p>We then proceed to do the reverse logic to the first step: get the rows where the team is <em>not</em> the team we passed in. This time, we only want the <code class="inline">gameid</code> and <code class="inline">team</code> This time, we only want the <code class="inline">gameid</code> and <code class="inline">team</code>. We will also rename the columns, since otherwise we will end up with two <code class="inline">team</code> columns.</p>
+<p>Lastly, we join the data on the <code class="inline">gameid</code> column. We will also move the <code class="inline">opponent</code> column to be directly next to the <code class="inline">team</code> column. Since you can’t have two columns with the same name, I had to rename <code class="inline">opponent</code> to <code class="inline">the_opponent</code> when reinserting the column at a different location.</p>
+<pre><code class="python lang-python language-python">result = pd.merge(team_games, opponents, on=&#39;gameid&#39;)
+
+result.insert(5, &#39;the_opponent&#39;, result[&#39;opponent&#39;])
+result.drop(&#39;opponent&#39;, axis=1, inplace=True)
+print(result)</code></pre>
+<p>Running this with <code class="inline">python3 team_games.py &quot;Echo Fox&quot;</code> gives me:</p>
+<pre><code class=" lang- language-">        gameid  week  game      team  side          the_opponent  gamelength  result  teamkills  teamdeaths
+0   1002620109   1.0     2  Echo Fox   Red         Clutch Gaming   32.430000       1       15.0        15.0
+1   1002620050   1.0     1  Echo Fox  Blue              FlyQuest   23.833333       1       18.0        13.0
+2   1002650038   2.0     1  Echo Fox   Red          OpTic Gaming   38.900000       0        9.0        15.0
+3   1002650084   2.0     2  Echo Fox  Blue      Golden Guardians   34.733333       1       23.0        13.0
+4   1002650117   3.0     1  Echo Fox   Red           Team Liquid   22.300000       0        7.0        28.0
+5   1002650174   3.0     2  Echo Fox   Red                Cloud9   37.366667       1       20.0        18.0
+6   1002670206   4.0     1  Echo Fox  Blue  Counter Logic Gaming   36.483333       0        5.0        25.0
+7   1002670249   4.0     2  Echo Fox   Red          Team SoloMid   31.950000       1       10.0         4.0
+8   1002660285   5.0     1  Echo Fox  Blue           100 Thieves   41.066667       0       10.0        20.0
+9   1002660352   5.0     2  Echo Fox   Red      Golden Guardians   32.383333       1       10.0        11.0
+10  1002690019   6.0     1  Echo Fox  Blue              FlyQuest   25.916667       1       13.0         3.0
+11  1002690064   6.0     2  Echo Fox   Red                Cloud9   36.083333       0       13.0        13.0
+12  1002680110   7.0     1  Echo Fox   Red  Counter Logic Gaming   40.600000       1       18.0        17.0
+13  1002680146   7.0     2  Echo Fox  Blue          Team SoloMid   43.583333       1       14.0        14.0
+14  1002710017   8.0     1  Echo Fox   Red           100 Thieves   28.633333       0        4.0        16.0
+15  1002710059   8.0     2  Echo Fox  Blue          OpTic Gaming   36.416667       0        9.0        10.0</code></pre>
+<p>Great! The next step is to do some analysis, and maybe make some visualisations.</p>
+
+  </div>
+</body>
+</html>
