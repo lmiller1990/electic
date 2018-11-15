@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    Intro to Perl
+  </h1>
+
+  <div class="post_body">
+    <p>I am learning Perl, a sysadmin language from the late 80s for my job at DoseMe, where we create precision dosing software.</p>
+<p>This article was published on 11/15/2018.</p>
+<h2>Variables</h2>
+<p>Variables are pretty similar to most languages, with a few quirks:</p>
+<pre><code class="pl lang-pl language-pl">my $name; # scalar
+my @_private_names; # array
+my %Names_to_Addresses; # hash
+sub myFunction; # function (known as subroutine)</code></pre>
+<p>You use <code class="inline">$</code> to access a single element of an array or hash, which of course, is a scalar (an array of scalars):</p>
+<pre><code class="pl lang-pl language-pl">my @vals = (&#39;a&#39;, &#39;b&#39;, &#39;c&#39;);
+
+print &quot;@vals\n&quot;; # a b c
+print &quot;$vals[0]\n&quot;; # a</code></pre>
+<p>Hashes are a little less nice to print:</p>
+<pre><code class="pl lang-pl language-pl">use Data::Dumper;
+
+my %other_vals = (
+  &#39;a&#39; =&gt; &#39;aa&#39;,
+  &#39;b&#39; =&gt; &#39;bb&#39;,
+  &#39;c&#39; =&gt; &#39;cc&#39;
+);
+
+print Dumper \%other_vals; 
+
+$VAR1 = {
+          &#39;a&#39; =&gt; &#39;aa&#39;,
+          &#39;b&#39; =&gt; &#39;bb&#39;,
+          &#39;c&#39; =&gt; &#39;cc&#39;
+        };</code></pre>
+<p>Or a slick one liner:</p>
+<pre><code class="pl lang-pl language-pl">print &quot;$_ $others_vals{$_}\n&quot; for (keys %other_vals);
+
+# not necessarily in order
+# c
+# a
+# b</code></pre>
+<p>You can set values like so:</p>
+<pre><code class="pl lang-pl language-pl">print &quot;new_arr[0]: $new_arr[0]\n&quot;; 
+print &quot;new_hash{&#39;a&#39;}: $new_hash{&#39;a&#39;}\n&quot;;
+
+# prints new_arr[0]: 1
+# prints new_hash{&#39;a&#39;}: 1</code></pre>
+<p>Moose is a object system for Perl. OO was basically bolted onto Perl as an afterthough. Let’s see an example.</p>
+<pre><code class="pl lang-pl language-pl">package Store::Toy { 
+  use Moose;
+
+  has &#39;discount&#39; =&gt; (is =&gt; &#39;ro&#39;, isa =&gt; &#39;Num&#39;);
+}
+
+my $store = Store::Toy-&gt;new(discount =&gt; 0.1);
+
+my $discount = $store-&gt;discount;
+
+print &quot;Discount is $discount&quot;; # 0.1</code></pre>
+<p>Types coercion is a thing. For example, using the scalar <code class="inline">$</code> on an array returns the count:</p>
+<pre><code class="pl lang-pl language-pl">my @arr = (1, 2, 3);
+my $count = @arr;
+
+print &quot;Count of (@arr) is: $count\n&quot;;</code></pre>
+<p>There is also the <em>quoting operator</em>, and <em>heredoc</em>, similar to Ruby: </p>
+<pre><code class="pl lang-pl language-pl">print qq(&quot;Ouch&quot;, he said); # prints &quot;Ouch&quot;, he said. Note, it keeps the doublequotes.
+
+my $longquote =&lt;&lt;&#39;END_BLURB&#39;;
+
+I can type really
+long
+text
+END_BLURB</code></pre>
+<p>Reading a textfile is done like so:</p>
+<pre><code class="pl lang-pl language-pl">my $textfile = &#39;README.md&#39;;
+
+open $fh, &#39;&lt;:utf8&#39;, $textfile;
+
+while (my $row = &lt;$fh&gt;) {
+  chomp $row;
+  print &quot;$row\n&quot;;
+}
+</code></pre>
+<p>Perl’s version of <code class="inline">undefined</code> is <code class="inline">undef</code>:</p>
+<pre><code class="pl lang-pl language-pl">my $rank; # undef
+my $name = undef;</code></pre>
+<p><code class="inline">undef</code> evaluates to <code class="inline">false</code> in a boolean context. The opposite is <code class="inline">defined</code>:</p>
+<pre><code class="pl lang-pl language-pl">if (defined &#39;str&#39;) {
+  print &#39;true&#39;;
+} else {;
+  print &#39;false&#39;;
+}
+
+# prints true</code></pre>
+<p>A common perl idiom that takes advantage of <code class="inline">()</code> on the LHS of an assignment is the following, to get the count of a lsit without using a temporary variable:</p>
+<pre><code class="pl lang-pl language-pl">my $count = () = (1, 2, 3); # () on the LHS forces a list context
+print $count; # prints the count, 3</code></pre>
+<p>// Up to page 24</p>
+
+  </div>
+</body>
+</html>
