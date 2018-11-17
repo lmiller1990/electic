@@ -141,4 +141,25 @@ my $count = () = (1, 2, 3); # () on the LHS forces a list context
 print $count; # prints the count, 3
 ```
  
-// Up to page 24
+There is a `..` operator, or the range operator:
+
+```pl
+print 1..4 # 1234
+```
+
+There are few ways to do loops in perl:
+
+
+```pl
+foreach (1..10) {
+  say "$_";
+}
+```
+
+This sets the _topic variable_ `$_`.
+
+Another way:
+
+```pl
+say "$_" for 1..10;
+```
