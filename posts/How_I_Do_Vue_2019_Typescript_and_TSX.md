@@ -2,7 +2,7 @@ In this article, I will talk about how I have been using Vue, and plan to do so 
 
 The app we are building will look like this:
 
-![](ss.png)
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png)
 
 You can select a sign, and it will perform the calculation.
 
@@ -67,7 +67,7 @@ export { Adder }
 
 Now import it in `App.tsx`: `import { Adder } from './components/Adder'`. Lastly, head to `main.ts` and change `import App from './App.vue` to `import { App } from './App'`. Run `yarn serve` (or `npm run serve`). `localhost:8080` should show the following:
 
-![](basic.png)
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/basic.png)
 
 ## Typesafe Props
 
@@ -308,7 +308,7 @@ To make the app look a bit better, here is some css. Create `components/adder.cs
 
 Then do `import './adder.css'` at the top of `Adder.tsx`. The page now looks like this:
 
-![](ss_2.png)
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss_2.png)
 
 Let's add Vuex and make the buttons work now.
 
@@ -541,7 +541,7 @@ export { App }
 
 Now the app looks like this:
 
-![](end.png)
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png)
 
 Clicking the signs updates the `result` based on the calculation.
 
