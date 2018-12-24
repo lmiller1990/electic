@@ -1,8 +1,12 @@
-In this article, I will talk about how I have been using Vue, and plan to do so in 2019. The main new technologies I've found useful over the last year have been TypeScript and TSX instead of `.vue` files.
+In this article, I will talk about how I have been using Vue, and plan to do so in 2019. The main new technologies I've found useful over the last year have been TypeScript and `.tsx` instead of `.vue` files. 
+
+The main benefit of using `.tsx` over `.vue` files is typechecking in the `render` function - as far as I know, `.vue` files to not have typechecking in the `<template>` section, or at least it is not very well supported.
 
 The app we are building will look like this:
 
 ![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png)
+
+The source code for this article is available [here](https://github.com/lmiller1990/vue_tsx_article_demo).
 
 You can select a sign, and it will perform the calculation.
 
@@ -557,4 +561,4 @@ Some improvements I'd like to cover in a future article include:
 
 - Typesafe getters, commit(mutation) and dispatch(action)
 
-The source code for this article is available here.
+The source code for this article is available [here](https://github.com/lmiller1990/vue_tsx_article_demo). Originally published on [my personal blog](https://lmiller1990.github.io/electic/).
