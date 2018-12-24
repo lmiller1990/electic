@@ -16,7 +16,7 @@
   <div class="post_body">
     <p>In this article, I will talk about how I have been using Vue, and plan to do so in 2019. The main new technologies I’ve found useful over the last year have been TypeScript and TSX instead of <code class="inline">.vue</code> files.</p>
 <p>The app we are building will look like this:</p>
-<p><img src="ss.png" alt=""/></p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png" alt=""/></p>
 <p>You can select a sign, and it will perform the calculation.</p>
 <h2>Setup</h2>
 <p>Install the Vue CLI v3 if you haven’t already, then create a new app by running <code class="inline">vue create tsx_adder</code>. </p>
@@ -73,7 +73,7 @@ const Adder = tsx.component({
 
 export { Adder }</code></pre>
 <p>Now import it in <code class="inline">App.tsx</code>: <code class="inline">import { Adder } from &#39;./components/Adder&#39;</code>. Lastly, head to <code class="inline">main.ts</code> and change <code class="inline">import App from &#39;./App.vue</code> to <code class="inline">import { App } from &#39;./App&#39;</code>. Run <code class="inline">yarn serve</code> (or <code class="inline">npm run serve</code>). <code class="inline">localhost:8080</code> should show the following:</p>
-<p><img src="basic.png" alt=""/></p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/basic.png" alt=""/></p>
 <h2>Typesafe Props</h2>
 <p>The first thing we will demonstrate is typesafe props, including both primitives (like <code class="inline">Number</code> and <code class="inline">Boolean</code>) as well as complex types, like <code class="inline">Enum</code>. In <code class="inline">Adder.tsx</code>, add the following:</p>
 <pre><code class="ts lang-ts language-ts">props: {
@@ -264,7 +264,7 @@ const Adder = tsx.componentFactoryOf&lt;IEvents&gt;().create({
   font-size: 3em;
 }</code></pre>
 <p>Then do <code class="inline">import &#39;./adder.css&#39;</code> at the top of <code class="inline">Adder.tsx</code>. The page now looks like this:</p>
-<p><img src="ss_2.png" alt=""/></p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss_2.png" alt=""/></p>
 <p>Let’s add Vuex and make the buttons work now.</p>
 <h2>Adding a Typesafe Vuex store</h2>
 <p>The next step for the app is adding a (somewhat) typsafe Vuex store. Make a <code class="inline">store</code> folder inside of <code class="inline">src</code>, then inside of <code class="inline">store</code> create <code class="inline">index.ts</code> and <code class="inline">calculation.ts</code>. Inside <code class="inline">store/index.ts</code>, add the following:</p>
@@ -462,7 +462,7 @@ const App = tsx.component({
 
 export { App }</code></pre>
 <p>Now the app looks like this:</p>
-<p><img src="end.png" alt=""/></p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png" alt=""/></p>
 <p>Clicking the signs updates the <code class="inline">result</code> based on the calculation.</p>
 <h2>Improvements and Conclusion</h2>
 <p>This article demonstrates:</p>
