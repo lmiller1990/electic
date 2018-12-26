@@ -10,3 +10,12 @@ a {
 * {
   font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
 }
+
+body {
+  display: flex;
+  justify-content: center;
+}
+
+section {
+  max-width: 960px;
+}

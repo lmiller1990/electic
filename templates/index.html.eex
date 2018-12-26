@@ -6,16 +6,18 @@
 </head>
 <link rel="stylesheet" href="index.css">
 <body>
-  <%= for post <- posts do %>
-    <a href="<%= post.link %>">
-      <%= post.title%>
-    </a>
+  <section>
+    <%= for post <- posts do %>
+      <a href="<%= post.link %>">
+        <%= post.title%>
+      </a>
 
-    <div class="intro">
-      <%= post.intro %>
-    </div>
-    <br>
-  <% end %>
+      <div class="intro">
+        <%= post.intro %>
+      </div>
+      <br>
+    <% end %>
+  </section>
 </body>
 <script src="index.js"></script>
 </html>
