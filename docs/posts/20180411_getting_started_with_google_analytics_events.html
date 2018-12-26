@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180411 Getting started with Google Analytics events
+  </h1>
+
+  <div class="post_body">
+    <p>Recently I became more interested in how users are interacting with my sites. Google Analytics is a great tool for tracking this kind of data.</p>
+<p>I want to know what features they are using, or not using, or having trouble with. This will let me spend my time most optimally.</p>
+<p>I will make a simple test application in Rails, and get up Google Analytics events. When a button is clicked, I want to record the button clicked, and some additional data.</p>
+<h3>Setting up Google Analytics</h3>
+<p>First, you will need an account. Visit <a href="https://www.google.com/analytics/#?modal_active=none">Google Analytics</a>, sign in, and visit the analytics tab.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ga_homepage.png" alt=""/></p>
+<h3>Add a new site</h3>
+<p>Click on “admin” in the bottom left hand corner, then click on “+ Create Account”.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/create_account.png" alt=""/></p>
+<p>We are testing on localhost, but GA requires a “real” url. We can use a virtual host to handle this. For now, you can use a placeholder. I am using my.domain.org. So under “Website URL”, just enter that.</p>
+<p>Now you will see this screen:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/tracking.png" alt=""/></p>
+<p>Copy and paste the script that looks like this:</p>
+<pre><code class="js lang-js language-js">&lt;!-- Global site tag (gtag.js) - Google Analytics --&gt;
+&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=UA-117322165-1&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag(&#39;js&#39;, new Date());
+
+  gtag(&#39;config&#39;, &#39;UA-117322165-1&#39;);
+&lt;/script&gt;</code></pre>
+<h3>Add the virtual host</h3>
+<p>On macOS, you can add a virtual host like so:</p>
+<pre><code class="sh lang-sh language-sh">sudo vim /etc/hosts</code></pre>
+<p>Inside, add the following to use localhost with GA:</p>
+<pre><code class="sh lang-sh language-sh">127.0.0.1 my.domain.org</code></pre>
+<h3>Make the Rails app and add the tracking script to <code class="inline">&lt;head&gt;</code></h3>
+<p>I will use Rails for this demo. Create a new app but running:</p>
+<pre><code class="sh lang-sh language-sh">rails new ga_test -T</code></pre>
+<p>and <code class="inline">cd</code> in. First things first, Open <code class="inline">app/views/layouts/application.html.erb</code> and add the GA script:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;title&gt;GaTest&lt;/title&gt;
+    &lt;%= csrf_meta_tags %&gt;
+
+    &lt;%= stylesheet_link_tag    &#39;application&#39;, media: &#39;all&#39;, &#39;data-turbolinks-track&#39;: &#39;reload&#39; %&gt;
+    &lt;%= javascript_include_tag &#39;application&#39;, &#39;data-turbolinks-track&#39;: &#39;reload&#39; %&gt;
+
+
+    &lt;!-- Global site tag (gtag.js) - Google Analytics --&gt;
+    &lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=UA-117322165-1&quot;&gt;&lt;/script&gt;
+    &lt;script&gt;
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag(&#39;js&#39;, new Date());
+
+      gtag(&#39;config&#39;, &#39;UA-117322165-1&#39;);
+    &lt;/script&gt;
+
+  &lt;/head&gt;
+
+  &lt;body&gt;
+    &lt;%= yield %&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<h3>Adding the GA events</h3>
+<p>Make a new page to test tracking. We can use <code class="inline">rails g controller</code> to do so:</p>
+<pre><code class="sh lang-sh language-sh">rails g controlls tests index</code></pre>
+<p>Now open <code class="inline">app/views/tests/index.html.erb</code> and add:</p>
+<pre><code class="html lang-html language-html">&lt;h1&gt;Tests#index&lt;/h1&gt;
+&lt;p&gt;Find me in app/views/tests/index.html.erb&lt;/p&gt;
+
+&lt;button onclick=&quot;sendEvent(&#39;button A&#39;)&quot;&gt;
+  Button A
+&lt;/button&gt;
+
+&lt;br&gt;
+
+&lt;button onclick=&quot;sendEvent(&#39;button B&#39;)&quot;&gt;
+  Button B
+&lt;/button&gt;
+
+&lt;script&gt;
+function sendEvent(btn) {
+  console.log(`Sending GA for ${btn}`)
+  window.gtag(&#39;event&#39;, &#39;click&#39;, {
+    event_category: &#39;button&#39;,
+    event_label: btn,
+  })
+}
+&lt;/script&gt;</code></pre>
+<p>This will send a <code class="inline">event</code> of <code class="inline">click</code> type with the <code class="inline">event_label</code> as the button label.</p>
+<h3>Try it out</h3>
+<p>Run the server with <code class="inline">rails server</code>, and visit <code class="inline">my.domain.org:3000/tests/index</code>. You must use the <code class="inline">my.domain.org</code>, and not <code class="inline">localhost</code>. Click the buttons a bunch of times, and head back to Google Analytics. Click “behavior”, then “events” and “top events”. You should be able to see the events! Sometimes it can take a bit of time to update. You can also visit the “real time” tab and watch the events update live.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/events_page.png" alt=""/></p>
+<h3>Conclusion</h3>
+<p>GA events are a powerful tool to learn about users are interacting with your site, and the areas that need improvements, or more focus.</p>
+
+  </div>
+</body>
+</html>
