@@ -3,7 +3,9 @@ defmodule Electic.Generators do
 
   def generate_index() do
     {:ok, files} = File.ls("posts")
-    files = files |> Utils.remove_drafts
+    files = files 
+            |> Utils.remove_drafts
+            |> Enum.sort
     
 
     posts = for file <- files do
