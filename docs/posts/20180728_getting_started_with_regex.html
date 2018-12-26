@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180728 Getting Started with Regex
+  </h1>
+
+  <div class="post_body">
+    <p>Regex is something I have always been slighly afraid of - long, intimidating and barely readable strings. Today was the day I learned regex, and started to use them to be more productive. </p>
+<p>Most of the examples and resources I used come from <a href="https://regexone.com">RegexOne</a>.</p>
+<h3>Basic Matching</h3>
+<p>The most basic regex is simply the text you want to match.</p>
+<pre><code class=" lang- language-">/abc/ -&gt; matches anything starting with &quot;abc&quot;</code></pre>
+<p>Easy enough.</p>
+<h3>Digits and Characters with \d  and \d</h3>
+<p>We can also match <em>any</em> non digit character using <code class="inline">\D</code>. Digits match using <code class="inline">\d\</code>.
+
+For example, we can match <code class="inline">12</code> using <code class="inline">\d\</code>. Or <code class="inline">a1</code> with <code class="inline">\D\d</code>.</p>
+<h3>Wildcards with the .</h3>
+<p><code class="inline">.</code> matches anything. <strong>Anything</strong>. Even whitespace. You can match a literal <code class="inline">.</code> by escaping with .</p>
+<h3>Groups with []</h3>
+<p>You can specify groups to match using <code class="inline">[]</code>. For example we can match <code class="inline">man</code> and <code class="inline">can</code> but not <code class="inline">dan</code> with <code class="inline">[mc]</code>.</p>
+<h3>Excluding matches with ^</h3>
+<p>You can exclude matches using <code class="inline">^</code>. We can match <code class="inline">hog</code> and <code class="inline">dog</code> but ignore <code class="inline">bog</code> using <code class="inline">[^b]</code>. For completeness we can do <code class="inline">[^b]og</code>.</p>
+<h3>Ranges</h3>
+<p> You can define ranges, for example to match English words the follow is often used: <code class="inline">[A-Za-z0-9_]</code>. Writing that is tiresome, so you can use the metacharacter <code class="inline">\w</code> which accomplishes the same thing. An example of a range is <code class="inline">[A-D</code>], which matches anything containing A, B, C or D.</p>
+<h3>Matching a repetitions</h3>
+<p>You can match repetitions using <code class="inline">{}</code>. For example <code class="inline">a{2}</code> matches two <em>or more</em> <code class="inline">a</code> letters. It also works with ranges, for example <code class="inline">[a-c]{2}</code> matches a, b or c twice in a row. You can also match <code class="inline">bear</code> with <code class="inline">b{1}..r{1}</code>.</p>
+<h3>* and + for arbitrary matching</h3>
+<p>You can match any number of occurrences with <code class="inline">*</code> and at least one or more with <code class="inline">+</code>. For example <code class="inline">a+</code> matches any string with at least one <code class="inline">a</code>. Or <code class="inline">[abc]+</code> matches any string with either a, b or c.</p>
+<h3>Optional matches with ?</h3>
+<p><code class="inline">?</code> indicates a character  is optional. <code class="inline">ab?c</code> will match both <code class="inline">abc</code> and <code class="inline">ac</code>, since <code class="inline">b?</code> is optional.</p>
+<p>Take the following:</p>
+<pre><code class=" lang- language-">1 file found?
+2 files found?
+24 files found?
+0 files found.</code></pre>
+<p>We can match the first three, but not the last, <code class="inline">\?</code>. Or a complete match with <code class="inline">\d?.*\?</code>. An optional digit, any number of characters and a <code class="inline">?</code>.</p>
+<h3>Whitespace with \s</h3>
+<p>You can match whitespace with <code class="inline">\s</code>. For example:</p>
+<pre><code class=" lang- language-">  a
+    b
+c</code></pre>
+<p>We can match the first two with <code class="inline">\s+</code>. This means “starting with whitespace”. We can improve it with <code class="inline">\s+.*</code>, to look for characters after the whitespace.</p>
+<h3>Matching start end ends with ^ and $</h3>
+<p>We can match the start of a line with ^ and the end with $. For example, we can match Australia with <code class="inline">^A.*a$</code>. Starting with <code class="inline">A</code>, and arbitrary amount of characters, then ending with <code class="inline">a</code>.</p>
+<h3>Captures</h3>
+<p>We can specify which part of the regex we want to keep, or capture, using <code class="inline">()</code>. Say we have a bunch of files, and we want the filename part of all the <code class="inline">.pdf</code> files.</p>
+<pre><code class=" lang- language-">file_record.pdf
+file_aaa.pdf
+other.png</code></pre>
+<p>We can match and capture the pdf file names using <code class="inline">(^file.*)\.pdf</code>. Anything starting with <code class="inline">file</code> and ending with <code class="inline">.pdf</code>, but only keep the filename part.</p>
+<h3>Multiple capture groups</h3>
+<p>You can capture multiple sets of charaters in the same expression. Take this example:</p>
+<pre><code class=" lang- language-">Jan 1987
+Mar 1983
+Oct 2012</code></pre>
+<p>We can match the month and year, and then just the year part, with the following:</p>
+<pre><code class=" lang- language-">(\D{3}\s+(\d{4}))</code></pre>
+<p>Which reads: </p>
+<ul>
+<li>any three non digits
+</li>
+<li>at least one whitespace
+</li>
+<li>any four digits
+</li>
+</ul>
+<p>Another example:</p>
+<pre><code class=" lang- language-">1280x720 
+1920x1600   
+1024x768    </code></pre>
+<p>We want to capture both the width and height. the height is three and an optional fourth digit. The regex looks like this:</p>
+<pre><code class=" lang- language-">(\d{4})x+(\d{3}\d?)</code></pre>
+<h3>Or with |</h3>
+<p>You can match using logical OR using <code class="inline">|</code>. For example you can match “I love cats” and “I love dogs” with <code class="inline">I love (cats|dogs)</code>.</p>
+<h3>Some other metacharacters</h3>
+<p><code class="inline">\S</code> matches non whitespace
+<code class="inline">\b</code> matches the boundary between a word and non word character.</p>
+<h2>Conclusion</h2>
+<p>Learning just some basic regex make the whole system a lot less scary, and is very exciting. I will continue practising and learning regex.</p>
+
+  </div>
+</body>
+</html>

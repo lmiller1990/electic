@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20181224 How I Do Vue 2019 Typescript and TSX
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, I will talk about how I have been using Vue, and plan to do so in 2019. The main new technologies I’ve found useful over the last year have been TypeScript and <code class="inline">.tsx</code> instead of <code class="inline">.vue</code> files. </p>
+<p>The main benefit of using <code class="inline">.tsx</code> over <code class="inline">.vue</code> files is typechecking in the <code class="inline">render</code> function - as far as I know, <code class="inline">.vue</code> files to not have typechecking in the <code class="inline">&lt;template&gt;</code> section, or at least it is not very well supported.</p>
+<p>The app we are building will look like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png" alt=""/></p>
+<p>The source code for this article is available <a href="https://github.com/lmiller1990/vue_tsx_article_demo">here</a>.</p>
+<p>You can select a sign, and it will perform the calculation.</p>
+<h2>Setup</h2>
+<p>Install the Vue CLI v3 if you haven’t already, then create a new app by running <code class="inline">vue create tsx_adder</code>. </p>
+<p>For each of prompts</p>
+<ul>
+<li>The only feature we want is TypeScript and Babel, so select those two. 
+</li>
+<li>We do not want the class-style component syntax
+</li>
+<li>We do want Babel
+</li>
+<li>select “in dedicated files” for the config
+</li>
+</ul>
+<p>Once that has finished installing, <code class="inline">cd tsx_adder</code>. We need one dependency to be able to use TSX. That is <code class="inline">vue-tsx-support</code>. Install in by running <code class="inline">vue add tsx-support</code>. We will also demonstrate Vuex with TypeScript, so add it with <code class="inline">yarn add vuex</code>.</p>
+<h2>Structure</h2>
+<p>The application will have two components: <code class="inline">App.tsx</code> and <code class="inline">Adder.tsx</code>. The <code class="inline">App.tsx</code> will connect to the Vuex store and pass props to the <code class="inline">Adder</code>, which is the presentation component that will handle the layout and UI. As per the container/presenter pattern (also known as smart/dumb, container/component), In a large app, you would probably have an <code class="inline">AdderContainer.tsx</code>, but for simplicity I am just using <code class="inline">App.tsx</code> to interface with the store. <code class="inline">Adder.tsx</code> receives data from the store via props, and communicates with the parent by emitting events. This will let us demonstrate:</p>
+<ul>
+<li>typesafe props, including complex types like Enums and Objects
+</li>
+<li>typechecked events between the parent/child component
+</li>
+<li>how to get type inference and type safety with Vuex State in components
+</li>
+</ul>
+<p>Start off by converting <code class="inline">App.vue</code> to <code class="inline">App.tsx</code>. Update it to contain the following:</p>
+<pre><code class="ts lang-ts language-ts">import * as tsx from &#39;vue-tsx-support&#39;
+import { VNode } from &#39;vue&#39;
+
+const App = tsx.component({
+  name: &#39;App&#39;,
+
+  render(): VNode {
+    return (
+      &lt;Adder /&gt;
+    )
+  }
+})
+
+export { App }</code></pre>
+<p>Since we haven’t created <code class="inline">Adder.tsx</code> yet, create it: <code class="inline">components/Adder.tsx</code>. Inside <code class="inline">components/Adder.tsx</code>, add the following bare-bones component:</p>
+<pre><code class="ts lang-ts language-ts">import * as tsx from &#39;vue-tsx-support&#39;
+import { VNode } from &#39;vue&#39;
+
+const Adder = tsx.component({
+  name: &#39;Adder&#39;,
+
+  render(): VNode {
+    return (
+      &lt;div&gt;Adder&lt;/div&gt;
+    )
+  }
+})
+
+export { Adder }</code></pre>
+<p>Now import it in <code class="inline">App.tsx</code>: <code class="inline">import { Adder } from &#39;./components/Adder&#39;</code>. Lastly, head to <code class="inline">main.ts</code> and change <code class="inline">import App from &#39;./App.vue</code> to <code class="inline">import { App } from &#39;./App&#39;</code>. Run <code class="inline">yarn serve</code> (or <code class="inline">npm run serve</code>). <code class="inline">localhost:8080</code> should show the following:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/basic.png" alt=""/></p>
+<h2>Typesafe Props</h2>
+<p>The first thing we will demonstrate is typesafe props, including both primitives (like <code class="inline">Number</code> and <code class="inline">Boolean</code>) as well as complex types, like <code class="inline">Enum</code>. In <code class="inline">Adder.tsx</code>, add the following:</p>
+<pre><code class="ts lang-ts language-ts">props: {
+  left: {
+    type: Number,
+    required: true as true
+  },
+
+  right: {
+    type: Number,
+    required: true as true
+  }
+},</code></pre>
+<p>One caveat is you need to type <code class="inline">true as true</code> to get TypeScript to check the props at compile time. It is discussed breifly <a href="https://github.com/wonderful-panda/vue-tsx-support#available-apis-to-add-type-information">here</a>. One you add that, if your editor supports TypeScript (for example VS Code), head back to <code class="inline">App.tsx</code>, and you should see an error, and <code class="inline">&lt;Adder &gt;</code> has a red line under it. Towards the end of the error message, it says <code class="inline">Type &#39;{}&#39; is missing the following properties from type &#39;{ left: number; right: number; }&#39;: left, right</code>. Let’s provide <code class="inline">left</code> and <code class="inline">right</code> in <code class="inline">App.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">render(): VNode {
+  return (
+    &lt;Adder 
+      left={5}
+      right={3}
+    /&gt;
+  )
+}</code></pre>
+<p>Try passing a string instead - TypeScript will warn us the prop type is incorrect.</p>
+<p>Next, let’s add a more complex type - an <code class="inline">enum</code>. Create a directory called <code class="inline">types</code> under <code class="inline">src</code>, and inside it a <code class="inline">sign.ts</code> file with the following:</p>
+<pre><code class="ts lang-ts language-ts">enum Sign {
+  &#39;x&#39; = &#39;x&#39;,
+  &#39;/&#39; = &#39;/&#39;,
+  &#39;+&#39; = &#39;+&#39;,
+  &#39;-&#39; = &#39;-&#39;
+}
+
+export { Sign }</code></pre>
+<p>Next update <code class="inline">Adder.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { Sign } from &#39;@/types/sign&#39;
+
+// ...
+
+props: {
+  selectedSign: {
+    type: String as () =&gt; Sign,
+    required: true as true
+  }
+}</code></pre>
+<p>Another unforunately hack, which shows some of the limits of Vue’s TS support is <code class="inline">String as () =&gt; Sign</code>. Since our <code class="inline">Sign</code> enum is just Strings, we do <code class="inline">String as () =&gt; ...</code>. If it was an enum of <code class="inline">Object</code> or <code class="inline">Array</code>, we would type <code class="inline">Array as () =&gt; MyComplexArrayType[]</code>. More information about this is found <a href="https://frontendsociety.com/using-a-typescript-interfaces-and-types-as-a-prop-type-in-vuejs-508ab3f83480">here</a>.</p>
+<p>Head back to <code class="inline">App.tsx</code>, and you’ll see another error around <code class="inline">&lt;Adder /&gt;</code>. Fix it by adding the following:</p>
+<pre><code class="ts lang-ts language-ts">// ...
+import { Sign } from &#39;@/types/sign&#39;
+
+// ...
+
+  render(): VNode {
+    return (
+      &lt;Adder 
+        left={5}
+        right={3}
+        selectedSign={Sign[&#39;+&#39;]}
+      /&gt;
+    )
+  }</code></pre>
+<h2>Typesafe Events</h2>
+<p>Now let’s see how to have typechecked events. We want the adder to emit a <code class="inline">changeSign</code> event when any of the four signs are clicked. This can be achieved using <code class="inline">componentFactoryOf</code>, documented <a href="https://github.com/wonderful-panda/vue-tsx-support#componentfactoryof">here</a>. Start by updating <code class="inline">App.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">// imports...
+const App = tsx.component({
+  name: &#39;App&#39;,
+
+  methods: {
+    changeSign(sign: Sign) {
+
+    }
+  },
+
+  render(): VNode {
+    return (
+      &lt;Adder 
+        left={5}
+        right={3}
+        selectedSign={Sign[&#39;+&#39;]}
+        onChangeSign={this.changeSign}
+      /&gt;
+    )
+  }
+})
+
+export { App }</code></pre>
+<p><code class="inline">&lt;Adder /&gt;</code> has an error again: <code class="inline">Property &#39;onChangeSign&#39; does not exist on type &#39;({ props: ...</code>. That’s because we are passing a prop that <code class="inline">Adder</code> doesn’t expect.</p>
+<p>Add the following to <code class="inline">Adder.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface IEvents {
+  onChangeSign: (sign: Sign) =&gt; void
+}
+
+const Adder = tsx.componentFactoryOf&lt;IEvents&gt;().create({
+
+  // ...
+})</code></pre>
+<p>Now the error is gone. Try changing the signature of <code class="inline">changeSign(sign: Sign)</code> to <code class="inline">changeSign(sign: Number)</code> - TS warns you the parameter has the  incorrect type, very cool. Read more about <code class="inline">componentFactoryOf</code> <a href="https://github.com/wonderful-panda/vue-tsx-support#componentfactoryof">here</a>.</p>
+<p>Two last things to complete the <code class="inline">Adder.tsx</code> component. First, add the following interface at the top, and <code class="inline">data</code> function:</p>
+<pre><code class="ts lang-ts language-ts">// imports ...
+interface IAdderData {
+  signs: Sign[]
+}
+
+const Adder = tsx.componentFactoryOf&lt;IEvents&gt;().create({
+  // ...
+  
+  data(): IAdderData {
+    return {
+      signs: [
+        Sign[&quot;+&quot;],
+        Sign[&quot;-&quot;],
+        Sign[&quot;x&quot;],
+        Sign[&quot;/&quot;]
+      ]
+    }
+  }</code></pre>
+<p>Lastly, let’s add the <code class="inline">render</code> function for <code class="inline">Adder.tsx</code>. It isn’t anything special, so I won’t go into detail.</p>
+<pre><code class="ts lang-ts language-ts">render(): VNode {
+  const { signs, left, right, selectedSign } = this
+
+  return (
+    &lt;div class=&#39;wrapper&#39;&gt;
+      &lt;div class=&#39;inner&#39;&gt;
+        &lt;div class=&#39;number&#39;&gt;
+          {left}
+        &lt;/div&gt;
+
+        &lt;div class=&#39;signs&#39;&gt;
+          {signs.map(sign =&gt;
+            &lt;span 
+              class={sign === selectedSign ? &#39;selected sign&#39; : &#39;sign&#39;}
+              onClick={() =&gt; this.$emit(&#39;changeSign&#39;, sign)}
+            &gt;
+              {sign}
+            &lt;/span&gt;)
+          }
+        &lt;/div&gt;
+
+        &lt;div class=&#39;number&#39;&gt;
+          {right}
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div class=&#39;result&#39;&gt;
+        &lt;span&gt;
+          Result: {this.$slots.result}
+        &lt;/span&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}</code></pre>
+<p>One small caveat is we define the event interface as <code class="inline">onChangeSign</code>, but we emit <code class="inline">changeSign</code>.</p>
+<p>To make the app look a bit better, here is some css. Create <code class="inline">components/adder.css</code> and insert to following:</p>
+<pre><code class="css lang-css language-css">.wrapper, .signs {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+}
+
+.signs {
+  align-items: center;
+}
+
+.sign {
+  cursor: pointer;
+  border: 2px solid rgba(100, 100, 20, 0.4);
+  padding: 5px;
+  width: 30px;
+  height: 30px;
+  margin: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.selected {
+  background-color: rgba(0, 0, 255, 0.4);
+}
+
+.inner {
+  display: flex;
+  justify-content: space-between;
+}
+
+.number {
+  font-size: 2.5em;
+}
+
+.result {
+  font-size: 3em;
+}</code></pre>
+<p>Then do <code class="inline">import &#39;./adder.css&#39;</code> at the top of <code class="inline">Adder.tsx</code>. The page now looks like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss_2.png" alt=""/></p>
+<p>Let’s add Vuex and make the buttons work now.</p>
+<h2>Adding a Typesafe Vuex store</h2>
+<p>The next step for the app is adding a (somewhat) typsafe Vuex store. Make a <code class="inline">store</code> folder inside of <code class="inline">src</code>, then inside of <code class="inline">store</code> create <code class="inline">index.ts</code> and <code class="inline">calculation.ts</code>. Inside <code class="inline">store/index.ts</code>, add the following:</p>
+<pre><code class="ts lang-ts language-ts">import Vue from &#39;vue&#39;
+import Vuex from &#39;vuex&#39;
+
+import { calculation, ICalculationState } from &#39;./calculation&#39;
+
+Vue.use(Vuex)
+
+interface IState {
+  calculation: ICalculationState
+}
+
+const store = new Vuex.Store&lt;IState&gt;({
+  modules: {
+    calculation
+  }
+})
+
+export { store, IState } </code></pre>
+<p>Nothing especially exciting - we just define a new Veux store, and pass a <code class="inline">calculation</code> module, which we are going to make now. In <code class="inline">calculation.ts</code> add the following:</p>
+<pre><code class="ts lang-ts language-ts">import { Module } from &#39;vuex&#39;
+
+interface ICalculationState {
+  left: number
+  right: number
+}
+
+const calculation: Module&lt;ICalculationState, {}&gt; = {
+  state: {
+    left: 3,
+    right: 1
+  }
+}
+
+export {
+  calculation,
+  ICalculationState
+}</code></pre>
+<p>We define a <code class="inline">calculation</code> module, with the <code class="inline">left</code> and <code class="inline">right</code> values in the state. Import it in <code class="inline">main.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import Vue from &#39;vue&#39;
+import { App } from &#39;./App&#39;
+import { store } from &#39;@/store&#39;
+
+Vue.config.productionTip = false
+
+new Vue({
+  store,
+  render: h =&gt; h(App)
+}).$mount(&#39;#app&#39;)</code></pre>
+<p>Let’s use these values in the app now. Update <code class="inline">App.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">import * as tsx from &#39;vue-tsx-support&#39;
+import { VNode } from &#39;vue&#39;
+import { Adder } from &#39;./components/Adder&#39;
+
+import { Sign } from &#39;@/types/sign&#39;
+import { IState } from &#39;@/store&#39;
+
+const App = tsx.component({
+  name: &#39;App&#39;,
+
+  computed: {
+    left(): number {
+      return (this.$store.state as IState).calculation.left
+    },
+
+    right(): number {
+      return (this.$store.state as IState).calculation.right
+    }
+  },
+
+  methods: {
+    changeSign(sign: Sign) {
+
+    }
+  },
+
+  render(): VNode {
+    return (
+      &lt;Adder 
+        left={this.left}
+        right={this.right}
+        selectedSign={Sign[&#39;+&#39;]}
+        onChangeSign={this.changeSign}
+      /&gt;
+    )
+  }
+})
+
+export { App }</code></pre>
+<p>We need to type <code class="inline">(this.$store.state as IState)</code> to get typechecking on the store modules. There are other alternatives that will let you get type checking without casting <code class="inline">this.$state</code> to <code class="inline">IState</code>, but I’ve been using this pattern and found it pretty good so far.</p>
+<h2>Adding a Mutation</h2>
+<p>Let’s add a mutation. The goal will be to save the <code class="inline">selectedSign</code> in the state, and update it with a mutation. Update <code class="inline">calculation.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { Module } from &#39;vuex&#39;
+
+import { Sign } from &#39;@/types/sign&#39;
+
+interface ICalculationState {
+  left: number
+  right: number
+  sign: Sign
+}
+
+const SET_SIGN = &#39;SET_SIGN&#39;
+
+const calculation: Module&lt;ICalculationState, {}&gt; = {
+  namespaced: true,
+
+  state: {
+    left: 3,
+    right: 1,
+    sign: Sign[&#39;+&#39;]
+  },
+
+  mutations: {
+    [SET_SIGN](state, payload: Sign) {
+      state.sign = payload
+    }
+  }
+}
+
+export {
+  calculation,
+  ICalculationState
+}</code></pre>
+<p>We added a <code class="inline">SET_SIGN</code> mutation. The type of <code class="inline">state</code> is interferred, since we passed in <code class="inline">ICalculationState</code> to <code class="inline">Module</code> when we declared the calculation module. We can use the new mutation in <code class="inline">App.tsx</code>:</p>
+<pre><code class="ts lang-ts language-ts">// ...
+  methods: {
+    changeSign(sign: Sign) {
+      this.$store.commit(&#39;calculation/SET_SIGN&#39;, sign)
+    }
+  },
+// ...</code></pre>
+<p>We do not get any typechecking on the <code class="inline">commit</code> handler or payload. This is still a problem I’m exploring solutions to. There are a few solutions out there, but none of which feel clean enough, or require a level of abstraction I’m not happy with. I hope Vuex itself can evolve to provide a better TS experience out of the box in the future. I will propose my solution in a follow up article.</p>
+<p>Let’s finish the app off. Update <code class="inline">App.tsx</code> with the final code, which includes a computer property, <code class="inline">result</code>, to calculate the value based on the sign:</p>
+<pre><code class="ts lang-ts language-ts">import * as tsx from &#39;vue-tsx-support&#39;
+import { VNode } from &#39;vue&#39;
+import { Adder } from &#39;./components/Adder&#39;
+
+import { Sign } from &#39;@/types/sign&#39;
+import { IState } from &#39;@/store&#39;
+
+const App = tsx.component({
+  name: &#39;App&#39;,
+
+  computed: {
+    left(): number {
+      return (this.$store.state as IState).calculation.left
+    },
+
+    right(): number {
+      return (this.$store.state as IState).calculation.right
+    },
+
+    sign(): Sign {
+      return (this.$store.state as IState).calculation.sign
+    },
+
+    result(): number {
+      switch (this.sign) {
+        case Sign[&#39;+&#39;]:
+          return this.left + this.right
+        case Sign[&#39;-&#39;]:
+          return this.left - this.right
+        case Sign[&#39;x&#39;]:
+          return this.left * this.right
+        case Sign[&#39;/&#39;]:
+          return this.left / this.right
+      }
+    }
+  },
+
+  methods: {
+    changeSign(sign: Sign) {
+      this.$store.commit(&#39;calculation/SET_SIGN&#39;, sign)
+    }
+  },
+
+  render(): VNode {
+    return (
+      &lt;Adder 
+        left={this.left}
+        right={this.right}
+        selectedSign={this.sign}
+        onChangeSign={this.changeSign}
+      &gt;
+        &lt;div slot=&#39;result&#39;&gt;
+          {this.result}
+        &lt;/div&gt;
+      &lt;/Adder&gt;
+    )
+  }
+})
+
+export { App }</code></pre>
+<p>Now the app looks like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/vue_tsx/ss.png" alt=""/></p>
+<p>Clicking the signs updates the <code class="inline">result</code> based on the calculation.</p>
+<h2>Improvements and Conclusion</h2>
+<p>This article demonstrates:</p>
+<ul>
+<li>creating Vue components using <code class="inline">tsx</code>
+</li>
+<li>Typesafe props and events
+</li>
+<li>Typesafety for <code class="inline">this.$store</code> by using an interface
+</li>
+</ul>
+<p>Some improvements I’d like to cover in a future article include:</p>
+<ul>
+<li>Typesafe getters, commit(mutation) and dispatch(action)
+</li>
+</ul>
+<p>The source code for this article is available <a href="https://github.com/lmiller1990/vue_tsx_article_demo">here</a>. Originally published on <a href="https://lmiller1990.github.io/electic/">my personal blog</a>.</p>
+
+  </div>
+</body>
+</html>

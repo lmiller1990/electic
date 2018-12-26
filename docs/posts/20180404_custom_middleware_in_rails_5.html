@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180404 Custom Middleware in Rails 5
+  </h1>
+
+  <div class="post_body">
+    <p>Rails is built on top of Rack, a general purpose Ruby HTTP server. Much of Rails comprises of Rack middlware (ActionDispatch, etc). Let’s see how to add a custom middleware, as of Rails 5.</p>
+<h3>Setup</h3>
+<p>Generate a new Rails 5 app by running:</p>
+<pre><code class="sh lang-sh language-sh">rails new custom_middleware</code></pre>
+<p>Next, we will make a <code class="inline">middlewares</code> folder inside of <code class="inline">app</code>, with <code class="inline">my_middleware.rb</code>.</p>
+<pre><code class="sh lang-sh language-sh">cd custom_middleware
+mkdir app/middlewares
+touch app/middlewares/my_middleware.rb</code></pre>
+<p>Inside of <code class="inline">my_middleware.rb</code>, add the following bare-bones middleware:</p>
+<pre><code class="rb lang-rb language-rb">class MyMiddleware
+  def initialize app
+    @app = app
+  end
+
+  def call env
+    status, headers, body = @app.call(env)
+    puts &quot;Middleware called. Status: #{status}, Headers: #{headers}&quot;
+    [status, headers, body]
+  end
+end</code></pre>
+<p>Lastly, we need to add the middleware. We can do this on a <strong>per environment basis</strong>, inside of <code class="inline">config/environments/[env]</code>. I will add <code class="inline">my_middleware</code> to <code class="inline">config/environments/development.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">Rails.application.config do
+  Rails.application.config.middleware.use MyMiddleware
+end</code></pre>
+<p>Prior to Rails 5, you could do this ins <code class="inline">application/config.rb</code>, and as a String, not a Symbol. This doesn’t seem to work as of Rails 5.</p>
+<p>You can check the middlware stack by running <code class="inline">rake middleware</code>. You should see a bunch of other middlewares, like ActionDispatch, among others, and towards the bottom <code class="inline">use MyMiddleware</code>.</p>
+<p>Start the rails app by running <code class="inline">rails server</code>, and visit any page. The log should show:</p>
+<blockquote><p>Middleware called. 200, {“X-Frame-Options”=&gt;”SAMEORIGIN”, “X-XSS-Protection”=&gt;”1; mode=block”, “X-Content-Type-Options”=&gt;”nosniff”, “Content-Type”=&gt;”application/json; charset=utf-8”}</p>
+</blockquote>
+<p>I’ll look at implementing a more interesting proxy middleware in a future post.</p>
+
+  </div>
+</body>
+</html>

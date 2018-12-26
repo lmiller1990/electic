@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180828 Integrating Cypress with Rails
+  </h1>
+
+  <div class="post_body">
+    <p>Traditionally, Rails gives us a full stack development framework including E2E tests with Selenium to develop websites. Let’s see how to transition an app using Rails’ built in system tests to using Cypress, a new E2E framework built on Node.js, targetting modern JavaScript heavy applications.</p>
+<p>A common Rails stack looks like:</p>
+<ul>
+<li>RSpec for the testing framework
+</li>
+<li>FactoryBot for populating the database
+</li>
+<li>DatabaseCleaner (or just ActiveRecord) for cleaning the database between tests
+</li>
+<li>Selenium for driving the browser in E2E tests
+</li>
+</ul>
+<p>Moving to Cypress (at least for the E2E tests), it now looks like:</p>
+<ul>
+<li>Mocha/Chai combo for the testing framework
+</li>
+<li>No good replacement for FactoryBot
+</li>
+<li>Need to figure the database clearing/truncation out on our own
+</li>
+<li>Cypress for the browser tests
+</li>
+</ul>
+<p>At first glance, and based on my experience, the stack is a lot less “batteries included”, which is what I like about Rails. I’m continuing to try new things out. This article will</p>
+<ol>
+<li>Set up the traditional stack, and make a simple CRUD app with a few simple E2E tests
+</li>
+<li>Move to the cypress.io stack, while implementing the same tests
+</li>
+<li>Dicuss improvements and thoughts
+</li>
+</ol>
+<p>I like each blog post to be independant, and include all the steps to recreate it. If you don’t care about setting up the Rails app with RSpec etc, just grab the repo here and move to the second half.</p>
+<h2>Creating the Rails App</h2>
+<p>Note: If you want to skip to the section where I add Cypress, ctrl+f “Installing and Setting Up Cypress”.</p>
+<p>Generate the Rails app, skipping MiniTest and using Postgres for the database with <code class="inline">rails new cypress_app -T --database=postgresql</code>. Update <code class="inline">group :development, :test</code> in the <code class="inline">Gemfile</code>:</p>
+<p>Add FactoryBot and RSpec and webpacker.</p>
+<pre><code class="rb lang-rb language-rb">group :development, :test do
+  # Call &#39;byebug&#39; anywhere in the code to stop execution and get a debugger console
+  gem &#39;byebug&#39;, platforms: [:mri, :mingw, :x64_mingw]
+
+  gem &#39;rspec-rails&#39;, &#39;~&gt; 3.8&#39;
+  gem &#39;capybara&#39;
+  gem &#39;factory_bot_rails&#39;
+  gem &#39;selenium-webdriver&#39;
+  gem &#39;webdrivers&#39;
+  gem &#39;rack-cors&#39;
+end</code></pre>
+<p>Then run <code class="inline">bundle install</code>, and generate the binstub and <code class="inline">system</code> folder by running:</p>
+<pre><code class=" lang- language-">rails generate rspec:install &amp;&amp; mkdir spec/system</code></pre>
+<p>Next. update <code class="inline">rails_helper.rb</code> to let us use <code class="inline">FactoryBot</code> methods directly in our specs. Also, we want to use <code class="inline">selenium_chrome_headless</code> for the specs (before moving to Cypress):</p>
+<pre><code class="rb lang-rb language-rb">require &#39;webdrivers&#39;
+
+# ...
+
+RSpec.configure do |config|
+  config.include FactoryBot::Syntax::Methods
+
+  # ...
+
+  config.before(:each, type: :system, js: true) do
+    driven_by :selenium_chrome_headless
+  end
+end
+
+</code></pre>
+<p>Initalize the database with <code class="inline">rails db:create</code>. That should have set up RSpec, FactoryBot and installed the dependencies for system tests.</p>
+<h2>Creating the Crud App</h2>
+<p>We will make a simple blog app, that lets an anonymous user create a post, which has a <code class="inline">title</code>, <code class="inline">body</code> and <code class="inline">category</code>. We need a <code class="inline">Post</code> and <code class="inline">Category</code> model - create them with the following:</p>
+<pre><code class=" lang- language-">rails g model category name:string &amp;&amp; \
+rails g model post title:string body:text category:references &amp;&amp; \
+rails db:migrate</code></pre>
+<p>Next, we need a <code class="inline">posts_controller</code> to create posts. Create one with <code class="inline">touch app/controllers/posts_controller.rb</code>. We will come back to this in a moment.</p>
+<p>Update <code class="inline">models/category.rb</code> to reflect the <code class="inline">has_many</code> relationship (a category can have many posts):</p>
+<pre><code class="rb lang-rb language-rb">class Category &lt; ApplicationRecord
+  has_many :posts
+end </code></pre>
+<p>Update <code class="inline">config/routes.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">Rails.application.routes.draw do
+  resources :posts
+end</code></pre>
+<p>Add some code to <code class="inline">app/controllers/posts_controller.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">class PostsController &lt; ApplicationController
+  def new
+  end
+
+  def create
+  end
+
+  def index
+  end
+end</code></pre>
+<p>Create some views with </p>
+<pre><code class="sh lang-sh language-sh">mkdir app/views/posts &amp;&amp; \
+touch app/views/posts/new.html.erb &amp;&amp; \
+touch app/views/posts/_form.html.erb &amp;&amp; \
+touch app/views/posts/show.html.erb &amp;&amp; \
+touch app/views/posts/index.html.erb</code></pre>
+<p>Create a test with <code class="inline">touch spec/system/posts_spec.rb</code>, and add:</p>
+<pre><code class="rb lang-rb language-rb">require &#39;rails_helper&#39;
+
+feature &#39;creates a post&#39;, type: :system, js: true do
+  it &#39;creates a post&#39; do
+    visit new_post_url
+    take_screenshot
+
+    expect(1).to eq 1
+  end
+end</code></pre>
+<p>Make sure everything is working by running <code class="inline">rspec spec/system</code>. If the test passes, everything is working correctly.</p>
+<h2>E2E with Rails’ System Tests</h2>
+<p>Before moving on to using Cypress, let’s make sure the code is working correctly using the built in system tests, which run using <code class="inline">selenium_chrome_headless</code>. Update <code class="inline">spec/system/posts_spec.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">require &#39;rails_helper&#39;
+
+feature &#39;Posts&#39;, type: :system, js: true do
+  let!(:category) { create(:category) }
+
+  context &#39;the post is valid&#39; do
+    it &#39;creates a post&#39; do
+      visit new_post_url
+
+      fill_in &#39;post_title&#39;, with: &#39;my great post&#39;
+      fill_in &#39;post_body&#39;, with: &#39;body&#39;
+      select category.name, from: &#39;post[category_id]&#39;
+      click_on &#39;Create Post&#39;
+
+      Post.all.reload
+
+      expect(Post.count).to eq 1
+      expect(Post.first.title).to eq &#39;my great post&#39;
+      expect(page).to have_content(&#39;my great post&#39;)
+    end
+  end
+end</code></pre>
+<p>This fails with:</p>
+<pre><code class=" lang- language-">Failures:
+
+  1) Posts the post is valid creates a post
+     Failure/Error: fill_in &#39;post_title&#39;, with: &#39;my great post&#39;
+
+     Capybara::ElementNotFound:
+       Unable to find field &quot;post_title&quot;</code></pre>
+<p>Update <code class="inline">app/controllers/posts_controller.rb</code> first:</p>
+<pre><code class="rb lang-rb language-rb">class PostsController &lt; ApplicationController
+  def new
+    @post = Post.new
+  end
+
+  def create
+    @post = Post.new(post_params)
+
+    if @post.save
+      redirect_to @post
+    else
+      flash[:errors] = @post.errors.full_messages
+      render :new
+    end
+  end
+
+  def show
+    @post = Post.find params[:id]
+  end
+
+  def index
+    @posts = Post.all
+  end
+
+  private
+
+  def post_params 
+    params.require(:post).permit(:title, :body, :category_id)
+  end
+end</code></pre>
+<p>Now we need the views. Start with <code class="inline">app/views/posts/_form.html.erb</code>:</p>
+<pre><code class="rb lang-rb language-rb">&lt;% if flash.present? %&gt;
+  &lt;% flash[:errors].each do |msg| %&gt;
+    &lt;%= content_tag :div, msg %&gt;
+  &lt;% end %&gt;
+&lt;% end %&gt;
+
+&lt;%= form_with model: @post, local: true do |f| %&gt;
+  &lt;%= f.label :title %&gt;
+  &lt;%= f.text_field :title %&gt;
+
+  &lt;%= f.label :body %&gt;
+  &lt;%= f.text_area :body %&gt;
+
+  &lt;%= f.select :category_id do %&gt;
+    &lt;%= options_from_collection_for_select(Category.all, :id, :name) %&gt;
+  &lt;% end %&gt;
+
+  &lt;%= f.submit %&gt;
+&lt;% end %&gt;</code></pre>
+<p>We included a flash message validating the minimum length of a post - we will add this validation in a moment. First, update <code class="inline">app/views/posts/new.html.erb</code>:</p>
+<pre><code class="rb lang-rb language-rb">&lt;%= render partial: &#39;form&#39; %&gt;</code></pre>
+<p>And lastly, <code class="inline">app/views/posts/show.html.erb</code>:</p>
+<pre><code class="rb lang-rb language-rb">&lt;h2&gt;&lt;%= @post.title %&gt;&lt;/h2&gt;
+
+&lt;div class=&quot;category&quot;&gt;
+  Category: &lt;%= @post.category.name %&gt;
+&lt;/div&gt;
+
+&lt;div class=&quot;body&quot;&gt;
+  &lt;%= @post.body %&gt;
+&lt;/div&gt;</code></pre>
+<p>Now running <code class="inline">rspec spec/system</code> should give us a passing test. Let’s implement two more tests, starting with validating the length of a post title. Update <code class="inline">app/models/post.rb</code>.</p>
+<pre><code class="rb lang-rb language-rb">class Post &lt; ApplicationRecord
+  validates :title, { length: { minimum: 5 } } 
+  belongs_to :category
+end</code></pre>
+<p>Next, update <code class="inline">spec/system/posts_spec.rb</code>:</p>
+<pre><code class=" lang- language-">context &#39;the post title is too short&#39; do
+  it &#39;displays a flash&#39; do
+    visit new_post_url
+
+    fill_in &#39;post_title&#39;, with: &#39;aaa&#39;
+    fill_in &#39;post_body&#39;, with: &#39;body&#39;
+    select category.name, from: &#39;post[category_id]&#39;
+    click_on &#39;Create Post&#39;
+
+    Post.all.reload
+
+    expect(Post.count).to eq 0
+    expect(page).to have_content(&#39;too short&#39;)
+  end
+end</code></pre>
+<p>This should pass, too.</p>
+<p>Finally, add the following to <code class="inline">app/views/posts/index.html.erb</code>: </p>
+<pre><code class="erb lang-erb language-erb">&lt;h3&gt;Posts&lt;/h3&gt;
+
+&lt;div class=&quot;posts&quot;&gt;
+  &lt;% @posts.each do |post| %&gt;
+    &lt;div class=&quot;post&quot;&gt;
+      &lt;div class=&quot;title&quot;&gt;
+        Title: &lt;%= post.title %&gt;
+      &lt;/div&gt;
+
+      &lt;div class=&quot;body&quot;&gt;
+        Body&lt;%= post.title %&gt;
+      &lt;/div&gt;
+      
+      &lt;%= link_to &#39;edit&#39;, edit_post_url(post) %&gt;
+      &lt;hr&gt;
+    &lt;/div&gt;
+  &lt;% end %&gt;
+&lt;/div&gt;</code></pre>
+<p>This shows a list of posts at <code class="inline">/posts</code>. Lastly, a test in <code class="inline">spec/system/posts_spec.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">it &#39;shows a list of posts&#39; do
+  5.times { create(:post, category: category) }
+
+  visit posts_url
+
+  expect(all(&#39;.post&#39;).length).to eq 5
+end</code></pre>
+<p>Running <code class="inline">rspec spec/system</code> should yield three passing tests.</p>
+<h2>Installing and Setting Up Cypress</h2>
+<p>Now we have a boring, yet working and well tested Rails app. Let’s proceed to add Cypress and migrate our test suite. Firstly, install Cypress and a few dependecies with:</p>
+<pre><code class="sh lang-sh language-sh">yarn add cypress axios --dev</code></pre>
+<p>Next, following their <a href="https://docs.cypress.io/guides/getting-started/installing-cypress.html#Adding-npm-scripts">documentation</a>, add a command to <code class="inline">package.json</code>. Mine <code class="inline">package.json</code> looks like this:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;name&quot;: &quot;cypress_app&quot;,
+  &quot;private&quot;: true,
+  &quot;dependencies&quot;: {},
+  &quot;devDependencies&quot;: {
+    &quot;axios&quot;: &quot;^0.18.0&quot;,
+    &quot;cypress&quot;: &quot;^3.1.0&quot;
+  },
+  &quot;scripts&quot;: {
+    &quot;cypress:open&quot;: &quot;cypress open&quot;
+  }
+}</code></pre>
+<p>Finally, run <code class="inline">yarn cypress:open</code>. You should see:</p>
+<p><img src="https://user-images.githubusercontent.com/19196536/46187267-c1f00280-c31d-11e8-9eaf-59844f46baef.png" alt=""/></p>
+<p>Furthermore, a <code class="inline">cypress</code> folder was created for you.</p>
+<h2>A Creates Post Test</h2>
+<p>Let’s migrate the first test - creating a post succesfully - to Cypress. First, start the rails server by running <code class="inline">rails server</code> in a separate terminal from Cypress. Next, create the test with <code class="inline">touch cypress/integration/posts.spec.js</code>, and add the following:</p>
+<pre><code class="js lang-js language-js">const context = describe
+
+describe(&#39;Creates a post&#39;, () =&gt; {
+  context(&#39;the post is valid&#39;, () =&gt; {
+    it(&#39;redirects to the created post&#39;, () =&gt; {
+      cy.visit(&#39;localhost:3000/posts/new&#39;)
+
+      cy.get(&#39;#post_title&#39;).type(&#39;my post&#39;, {force: true})
+      cy.get(&#39;#post_body&#39;).type(&#39;this is the post body&#39;, {force: true})
+      cy.get(&#39;#post_category_id&#39;).select(&#39;ruby&#39;, {force: true})
+
+      cy.get(&#39;input[type=&quot;submit&quot;]&#39;).click()
+
+      cy.get(&#39;.category&#39;).contains(&#39;Category: ruby&#39;)
+    })
+  })
+})</code></pre>
+<p>The Cypress DSL is fairly easy to read. Strictly speaking, <code class="inline">{force: true}</code> should not be necessary. Some of my tests were randomly failing without this, though, so I added it. I’ll investigate this in more detail later.</p>
+<p>If you still have the Cypress UI open, search for the test using the search box:</p>
+<p><img src="https://user-images.githubusercontent.com/19196536/46187265-c1f00280-c31d-11e8-8b67-0193827354e5.png" alt=""/></p>
+<p>This fails, of course:</p>
+<p><img src="https://user-images.githubusercontent.com/19196536/46187266-c1f00280-c31d-11e8-8122-7583ff289024.png" alt=""/></p>
+<p>Because no categories exist. Before implementing a nice work around, just create one by dropping down into <code class="inline">rails console</code> and running <code class="inline">Category.create!(name: &#39;ruby&#39;)</code>. Now the test passes!</p>
+<p><img src="https://user-images.githubusercontent.com/19196536/46187264-c1576c00-c31d-11e8-8795-961f4ebfdb53.png" alt=""/></p>
+<p>There are some problems:</p>
+<ol>
+<li>Running the tests in the development env is not good. We should use <code class="inline">RAILS_ENV=test</code>.
+</li>
+<li>Need a way to seed some data, like a category.
+</li>
+<li>Should clean the database between each test.
+</li>
+</ol>
+<p>Let’s get to work on the first two. </p>
+<h2>Test Seed Data and Running in RAILS_ENV=test</h2>
+<p>Let’s set up some basic seed data for the tests to use. First, create a <code class="inline">seeds</code> folder containing a <code class="inline">test.rb</code> file by running <code class="inline">mkdir db/seeds &amp;&amp; touch db/seeds/test.rb</code>. Inside, add:</p>
+<pre><code class="rb lang-rb language-rb">ruby = Category.create!(name: &#39;ruby&#39;)
+javascript = Category.create!(name: &#39;javascript&#39;)
+
+Post.create!(title: &#39;Seed Post&#39;, body: &#39;This is a seed post.&#39;, category: ruby)</code></pre>
+<p>Next, in <code class="inline">db/seeds.rb</code> add:</p>
+<pre><code class="rb lang-rb language-rb">load(Rails.root.join( &#39;db&#39;, &#39;seeds&#39;, &quot;#{Rails.env.downcase}.rb&quot;))</code></pre>
+<p>This will seed the correct seed file based on the current <code class="inline">RAILS_ENV</code>. </p>
+<h2>Cleaning the Database between Tests</h2>
+<p>Now we have a way to seed data, but no way to clean the database after each test. The way I’ve been handling this is by making a POST request to dedicated <code class="inline">/test//clean_database</code> endpoint <strong>before</strong> each test, as <a href="https://docs.cypress.io/guides/references/best-practices.html#Using-after-or-afterEach-hooks">recommended by Cypress</a>. Let’s make that API. First, update <code class="inline">config/routes.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">Rails.application.routes.draw do
+
+  # ...
+
+  if Rails.env.test?
+    namespace :test do
+      post &#39;clean_database&#39;, to: &#39;databases#clean_database&#39;
+      post &#39;seed_posts&#39;, to: &#39;seeds#seed_posts&#39;
+    end
+  end
+end</code></pre>
+<p>Next create the controller and spec: <code class="inline">mkdir app/controllers/test &amp;&amp; touch app/controllers/test/databases_controller.rb</code> and <code class="inline">mkdir spec/controllers &amp;&amp; mkdir spec/controllers/test &amp;&amp; touch spec/controllers/test/databases_controller_spec.rb</code>.</p>
+<p>Starting with <code class="inline">databases_controller_spec.rb</code>, add the following:</p>
+<pre><code class="rb lang-rb language-rb">require &#39;rails_helper&#39;
+
+describe Test::DatabasesController do
+  describe &#39;/clean_database&#39; do
+    it &#39;truncates and seeds the database&#39; do
+      category = create(:category)
+      5.times { |i| create(:post, category: category) }
+
+      post :clean_database, params: { &#39;database&#39;: { &#39;should_seed&#39;: true } }
+
+      # Seed db/seeds/test for default seeds
+      # Default 2 categories and 1 post
+      expect(Post.count).to eq 1
+      expect(Category.count).to eq 2
+    end
+
+    it &#39;truncates and seeds the database&#39; do
+      category = create(:category)
+      5.times { |i| create(:post, category: category) }
+
+      post :clean_database, params: { &#39;database&#39;: { &#39;should_seed&#39;: false } }
+ 
+      expect(Post.count).to eq 0
+      expect(Category.count).to eq 0
+    end
+  end
+end</code></pre>
+<p>There are two functions this API provides. Both specs test for truncation. We also allow a <code class="inline">should_seed</code> parameter to be provided. If <code class="inline">should_seed</code> is true, then we repopulate the database using the data defined in <code class="inline">db/seeds/test.rb</code>.</p>
+<p>The controller implementation is as follows:</p>
+<pre><code class="rb lang-rb language-rb">module Test
+  class DatabasesController &lt; ApplicationController
+
+    skip_before_action :verify_authenticity_token
+
+    def clean_database
+      tables = ActiveRecord::Base.connection.tables
+      tables.delete &#39;schema.migrations&#39;
+      tables.each { |t| ActiveRecord::Base.connection.execute(&quot;TRUNCATE #{t} CASCADE&quot;) }
+
+      Rails.application.load_seed unless [&#39;false&#39;, false].include?(params[&#39;database&#39;][&#39;should_seed&#39;])
+
+      render plain: &#39;Truncated and seeded database&#39;
+    end
+  end
+end</code></pre>
+<p>This should yield two passing specs. Now, restart the Rails server with <code class="inline">RAILS_ENV=test rails server</code>. Now, we need a way to actually access the API from within Cypress. Inside of <code class="inline">cypress/support/commands.js</code>, add the following:</p>
+<pre><code class="js lang-js language-js">import axios from &#39;axios&#39;
+
+Cypress.Commands.add(&#39;cleanDatabase&#39;, (opts = { seed: true }) =&gt; {
+  return axios({
+    method: &#39;POST&#39;,
+    url: &#39;http://localhost:3000/test/clean_database&#39;,
+    data: { should_seed: opts.seed }
+  })
+})</code></pre>
+<p>Cypress automatically loads all the helpers in <code class="inline">commands.js</code> for us. </p>
+<p>Since Rails is running on port 3000, and Cypress is assigned an arbitrary port, we need to support CORS for the <code class="inline">/test</code> routes. Inside <code class="inline">config/environments/test.rb</code>, add the following:</p>
+<pre><code class="rb lang-rb language-rb">if Rails.env.test?
+  Rails.application.config.middleware.insert_before 0, Rack::Cors do
+    allow do
+      origins &#39;*&#39;
+      resource &#39;/test/*&#39;, headers: :any, methods: %i(post)
+    end
+  end
+end</code></pre>
+<p>This allows CORS for the test environment only. Restart the Rails server, and reopen the Cypress UI if you closed it. It should pass… alas, it does not. </p>
+<p>If you look closely, only on the initial opening of the Cypress UI, the browser kind of “flickers” once. For some reason, this causes the <code class="inline">beforeEach</code> hook to be called twice, messing up the seed data. The post request contains the category id of the first seed run, however since the browser flickers and causes the data to be reseeded, the initial category id used in the test no longer exists! </p>
+<p>Once you have the UI running, however, simply rerunning the test should be enough to pass. Typically I only open the UI once, and leave it open, so it is not a big deal locally. On CI, this is a huge problem though. I’m going to get in contact with the Cypress team and see if they have a work around.</p>
+<p>One last thing I want to add is the ability to seed some data, depending on the test. For this, I’ll use another test-env-only controller. Create it with <code class="inline">touch app/controllers/test/seeds_controller.rb</code>. Add a test with <code class="inline">touch spec/controllers/test/seeds_controller_spec.rb</code>. Add the following test:</p>
+<pre><code class="rb lang-rb language-rb">require &#39;rails_helper&#39;
+
+describe Test::SeedsController do
+  describe &#39;/seed_posts&#39; do
+    it &#39;seeds posts&#39; do
+      create(:category)
+
+      expect {
+        post :seed_posts, params: { count: 1 }
+      }.to change { Post.count }.by 1
+    end
+  end
+end</code></pre>
+<p>This endpoint will simply seed a specified number posts. Now, the implementation in <code class="inline">seeds_controller.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">module Test
+  class SeedsController &lt; ApplicationController
+
+    skip_before_action :verify_authenticity_token
+
+    def seed_posts
+      category = Category.create!(name: &#39;ruby&#39;)
+      count = params[:count] || 0
+
+      count.to_i.times do |c|
+        Post.create!(
+          title: &quot;Post ##{c}&quot;, 
+          body: &quot;This is post ##{c}&quot;, 
+          category: category)
+      end
+    end
+  end
+end</code></pre>
+<p>This test should pass. Here are two more tests - one for the case where a post title is too short, and an error is displayed, and another for the <code class="inline">/posts</code> index page. This once will make use of the new <code class="inline">/seed_posts</code> route, so update <code class="inline">commands.js</code>:</p>
+<pre><code class=" lang- language-">Cypress.Commands.add(&#39;seedPosts&#39;, (count) =&gt; {
+  return axios({
+    method: &#39;POST&#39;,
+    url: &#39;http://localhost:3000/test/seed_posts&#39;,
+    data: { count }
+  })
+})</code></pre>
+<p>Everything passes! </p>
+<p><img src="https://user-images.githubusercontent.com/19196536/46187263-c1576c00-c31d-11e8-9357-8e1089396cef.png" alt=""/></p>
+<h2>Conclusion and Thoughts</h2>
+<p>This was a very long article. We covered:</p>
+<ul>
+<li>Setting up a traditional Rails app
+</li>
+<li>Installing Cypress
+</li>
+<li>Creating specific route for cleaning and seeding the database
+</li>
+<li>Using Cypress hooks, such as <code class="inline">beforeEach</code>, and custom commands
+</li>
+</ul>
+<p>Cypress is certainly a great tool, and a refreshing new angle on E2E testing. The lack of support for non Chromium based browsers, and of information on how to integrate it with various backends led to some challenges. However, I’m positive Cypress is going in a good direction and will continue to refine my workflow and integration with Rails.</p>
+
+  </div>
+</body>
+</html>

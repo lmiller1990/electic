@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180728 A Simple Router with Ruby and Rack
+  </h1>
+
+  <div class="post_body">
+    <p>Rack is the web server that powers many Ruby web frameworks, including Rails. Let’s see how you can make your own simple HTTP router, using Rack.</p>
+<p>This is based on a guide I followed by Adam Gamble about how to build a router. The guide is <a href="https://isotope11.com/blog/build-your-own-web-framework-with-rack-and-ruby-part-2">here</a>.</p>
+<h2>Rack Basics</h2>
+<p>A minimal Rack web server is as follows. Create a <code class="inline">Gemfile</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">source &quot;http://rubygems.org&quot;
+gem &quot;rack&quot;</code></pre>
+<p>And run <code class="inline">bundle</code>. To create a simple Rack server, all you need is an object with the <code class="inline">call</code> method. <code class="inline">call</code> will be passed information about the web request. Create <code class="inline">lib/basic_controller.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class BasicController
+  def call(env)
+    [200, {}, [&quot;Hello from basic controller&quot;]]
+  end
+end</code></pre>
+<p>And a <code class="inline">basic_rack.ru</code> at the top level:</p>
+<pre><code class="ruby lang-ruby language-ruby">require &#39;rack&#39;
+load &#39;lib/basic_controller.rb&#39;
+
+Rack::Handler::WEBrick.run(
+  BasicController.new, Port: 9000
+)</code></pre>
+<p>And start the server using <code class="inline">rackup basic_rack.rb</code>. The following is displayed if everything went well</p>
+<pre><code class="sh lang-sh language-sh">[2018-04-22 01:03:35] INFO  WEBrick 1.3.1
+[2018-04-22 01:03:35] INFO  ruby 2.3.3 (2016-11-21) [universal.x86_64-darwin17]
+[2018-04-22 01:03:35] INFO  WEBrick::HTTPServer#start: pid=36872 port=9000</code></pre>
+<p>As a quick aside:</p>
+<h3><code class="inline">load</code> and <code class="inline">require</code></h3>
+<p>We are using both <code class="inline">load</code> and <code class="inline">require</code>. What is the difference?</p>
+<p>Easy. Well, sort of. Basically, <code class="inline">load</code> will execute some code in a ruby file. You should pass an absolute path. When calling <code class="inline">load</code>, the following are imported:</p>
+<ul>
+<li>global variables
+</li>
+<li>classes
+</li>
+<li>constants
+</li>
+<li>methods
+</li>
+</ul>
+<p>but <em>not</em> local variables. So when we did <code class="inline">load(&quot;lib/basic_controller.rb&quot;)</code>, we <code class="inline">load</code> the <code class="inline">BasicController</code> class. The <code class="inline">.rb</code>extension is also necessary. If you call <code class="inline">load</code> twice, the code will be executed twice.</p>
+<p><code class="inline">require</code>, on the other hand, only executes code once, even if you call it multiple times. <code class="inline">require</code> code is saved in a global variable called <code class="inline">$LOADED_FEATURES</code>.</p>
+<h2>A better router</h2>
+<p>Now we know the basics of a Rack application. Let’s make a more robust example, with controllers and a router.</p>
+<p>Let’s start fresh. Create a <code class="inline">Gemfile</code> and add Rack:</p>
+<pre><code class="ruby lang-ruby language-ruby">gem &quot;rack&quot;</code></pre>
+<p>Create a <code class="inline">config.ru</code> and include the following:</p>
+<pre><code class="ruby lang-ruby language-ruby">require &#39;bundler&#39;
+Bundler.require
+
+require File.join(File.dirname(__FILE__), &quot;lib&quot;, &quot;main_rack&quot;)
+</code></pre>
+<p>Try running <code class="inline">rackup config.ru</code>. It will complain that <code class="inline">lib/main_rack.rb</code> doesn’t exist. Create that, too, and add the following:</p>
+<pre><code class="ruby lang-ruby language-ruby">class MainRack
+end</code></pre>
+<p>Run the app again (with <code class="inline">rackup config.ru</code>). Now we have a new error:</p>
+<pre><code class="sh lang-sh language-sh">/Library/Ruby/Gems/2.3.0/gems/rack-2.0.4/lib/rack/builder.rb:146:in `to_app&#39;: missing run or map statement (RuntimeError)</code></pre>
+<p>This error is from Rack itself. Rack requires a <code class="inline">run</code> method, that takes a class with a <code class="inline">call</code> method. Recall the original <code class="inline">BasicController</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class BasicController
+  def call(env)
+    [200, {}, [&quot;Hello from basic controller&quot;]]
+  end
+end</code></pre>
+<p>Go ahead and create <code class="inline">lib/request_handler.rb</code>.</p>
+<pre><code class="ruby lang-ruby language-ruby">class RequestHandler
+  def call(env)
+  end
+end</code></pre>
+<p>Great! Now running the app gives us the default output for a Rack server starting:</p>
+<pre><code class="sh lang-sh language-sh">[2018-04-22 18:05:50] INFO  WEBrick 1.3.1
+[2018-04-22 18:05:50] INFO  ruby 2.3.3 (2016-11-21) [universal.x86_64-darwin17]
+[2018-04-22 18:05:50] INFO  WEBrick::HTTPServer#start: pid=37786 port=9292</code></pre>
+<p><code class="inline">curl localhost:9292</code> returns a 500 error, though. Inspecting Rack’s output:</p>
+<pre><code class="sh lang-sh language-sh">Rack::Lint::LintError: Status must be &gt;=100 seen as integer</code></pre>
+<p>Right. <code class="inline">call</code> should return a status, headers, and a body. Let’s do that.</p>
+<pre><code class="ruby lang-ruby language-ruby">class RequestHandler
+  def call(env)
+    [200, {}, [&quot;ok&quot;]]
+  end
+end</code></pre>
+<p>Now we can curl the Rack server. Let’s move on to adding some routes.</p>
+<h3>Adding a Router</h3>
+<p>We will store the <code class="inline">router</code> reference in <code class="inline">MainRackApplication.router</code>, which will have a <code class="inline">route_for</code> method, that decides which controller will handle the request. Update <code class="inline">request_handler.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class RequestHandler
+  def call(env)
+    route = MainRackApplication.router.route_for(env)
+    if route
+      # stuff
+    else
+      return [404, {}, []]
+    end
+  end
+end</code></pre>
+<p>curling the server now will result in an error, since neither the <code class="inline">router</code> class, not the <code class="inline">route_for</code> method, exists. Create <code class="inline">lib/router.rb</code>, with just enough to let the server run again with <code class="inline">rackup config.ru</code> and curl it:</p>
+<pre><code class="ruby lang-ruby language-ruby">class Router
+  def route_for(env)
+  end
+end</code></pre>
+<p>Also, update <code class="inline">lib_main_rack.rb</code> to <code class="inline">require</code> the router, and set an instance variable:</p>
+<pre><code class="ruby lang-ruby language-ruby">require File.join(File.dirname(__FILE__), &#39;router.rb&#39;)
+
+class MainRack
+  attr_reader :router
+
+  def initialize
+    @router = Router.new
+  end
+end</code></pre>
+<p>Now curling the server returns a 404, since <code class="inline">route_for</code> returns <code class="inline">nil</code>.</p>
+<h3>Creating some routes</h3>
+<p>Before we implement the router logic and controllers, we need to decide on the DSL for the router. Let’s make it like Rails’. Create <code class="inline">config/routes.rb</code>, and inside add two routes:</p>
+<pre><code class="ruby lang-ruby language-ruby">MainRackApplication.router.config do
+  get &quot;/users&quot;, to: &quot;users#index&quot;
+  get &quot;/users/show&quot;, to: &quot;users#show&quot;
+end</code></pre>
+<p>We will define a <code class="inline">config</code> method on the <code class="inline">router</code>, which takes a block. Inside the block, we define a DSL of the following format:</p>
+<pre><code class="ruby lang-ruby language-ruby">[HTTP Verb] [path], to: &quot;controller#method&quot;</code></pre>
+<p>Soon we will use <code class="inline">instance_eval</code> to turn this into a function call to a method called <code class="inline">get</code>, which takes two arguments, a path and a hash of options including the controller and action.</p>
+<p>Let’s load the routes on startup. In <code class="inline">config.ru</code>, require <code class="inline">config/routes</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby"># ...
+require File.join(File.dirname(__FILE__), &quot;config&quot;, &quot;routes&quot;)
+# ...</code></pre>
+<p>Now when start the app, we are calling <code class="inline">MainRack.router.config</code>, which throws an error since it doesn’t exist. Let’s make it exist:</p>
+<pre><code class=" lang- language-">class Router
+  #...
+
+  def config
+  end
+end</code></pre>
+<p>Okay, we can once again start the app without errors. But <code class="inline">config</code> doesn’t do anything. What should it do, then?</p>
+<h3>Registering the routes</h3>
+<p>Our goal is to create a hash called <code class="inline">@routes</code>, that we can use to look up the correct controller for each incoming request. Let’s add an <code class="inline">attr_reader</code> and initialize an empty hash for the <code class="inline">@routes</code>. The hash will have a default value of an empty array. This means if you ask for an unknown key, you get an empty array by default.</p>
+<pre><code class="ruby lang-ruby language-ruby">class Router
+  attr_reader :routes
+  def initialize
+    @routes = Hash.new{ |hash, key| hash[key] = [] }
+  end
+
+  # ..
+end</code></pre>
+<p>Now onto config. We want the <code class="inline">@routes</code> hash to look like this:</p>
+<pre><code class="ruby lang-ruby language-ruby">{ :get =&gt; [
+    &quot;/test/show&quot;: {:klass =&gt; &quot;TestController&quot;, :method =&gt; &quot;show&quot; }
+  ]
+}</code></pre>
+<p>Then if we get a <code class="inline">GET</code> request, we can loop all the <code class="inline">GET</code> routes, until we find the matching one. With this goal in mind, let’s implement <code class="inline">config</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">def config(&amp;block)
+  instance_eval &amp;block
+end</code></pre>
+<p>This will produce the following, based on our <code class="inline">config/routes.rb</code> DSL:</p>
+<pre><code class="ruby lang-ruby language-ruby">get(&quot;users&quot;, { :to -&gt; &quot;users#show&quot; })</code></pre>
+<p>So we need a <code class="inline">get</code> method, that takes a String path and an Hash of options.</p>
+<pre><code class="ruby lang-ruby language-ruby">def get(path, options={})
+  @routes[:get] &lt;&lt; [path, parse_opts(options[:to])]
+end</code></pre>
+<p>We should format the <code class="inline">options</code> nicely. If we just did <code class="inline">[path, options[:to]]</code> we would get:</p>
+<pre><code class="ruby lang-ruby language-ruby">@routes[:get] = [
+  [
+    &quot;/users/show&quot;, &quot;users#show&quot;
+  ]
+]</code></pre>
+<p>We want to split “users#show” to a hash with <code class="inline">controller</code> and <code class="inline">method</code> keys. Let’s implement <code class="inline">parase_opts</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">def parse_opts(options)
+  controller, method = options.split(&quot;#&quot;)
+  {:controller =&gt; &quot;#{controller.capitalize}Controller&quot;, :method =&gt; method}
+end</code></pre>
+<p>Check it out by doing a <code class="inline">puts</code> after <code class="inline">instance_eval</code> in <code class="inline">config</code> and restarting the server:</p>
+<pre><code class="ruby lang-ruby language-ruby">Routes
+{:get=&gt;[[&quot;/users&quot;, {:controller=&gt;&quot;UsersController&quot;, :method=&gt;&quot;index&quot;}], [&quot;/users/show&quot;, {:controller=&gt;&quot;UsersController&quot;, :method=&gt;&quot;show&quot;}]]}</code></pre>
+<p>Great!</p>
+<h3>Adding Controllers</h3>
+<p>Now we have the routes set up. Let’s add two simple controllers - a <code class="inline">BaseController</code> and a <code class="inline">UseresController</code>. Note we still have not implemented the logic to forward the request to the correct controller yet, but we do have a nice <code class="inline">@routes</code> hash that helps match requests to controllers. Create <code class="inline">app/controllers.rb</code>, and <code class="inline">app/controllers/base_controller.rb</code>, as wel las <code class="inline">app/controllers/users_controller.rb</code>.</p>
+<p>First, add the following to <code class="inline">app/controllers/base_controller.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class BaseController
+  attr_reader :env
+
+  def initialize(env)
+    @env = env
+  end
+end</code></pre>
+<p>This lets any controllers inheriting from <code class="inline">BaseController</code> access <code class="inline">env</code>, which contains all the information from Rack, such as the request path, headers, and so on.</p>
+<p>Now add the following code to <code class="inline">app/controllers/users_controller.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class UsersController &lt; BaseController
+  def index
+  end
+
+  def show
+  end
+end</code></pre>
+<p>Remember, the controller has to return a response that complies to what Rack expects:</p>
+<pre><code class="ruby lang-ruby language-ruby">[status = 200, headers = {}, [body]]</code></pre>
+<p>Let’s go ahead and make class for this. Add it in <code class="inline">lib/response.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class Response
+  attr_accessor :status_code, :headers, :body
+
+  def initialize
+    @headers = {}
+  end
+
+  def rack_response
+    [status_code, headers, Array(body)]
+  end
+end</code></pre>
+<p>Nothing too exciting. <code class="inline">@headers</code> aren’t necessary, so they are set to an empty hash by default.</p>
+<p>Now we can head back to <code class="inline">users_controller.rb</code> and implement <code class="inline">#index</code>.</p>
+<pre><code class="ruby lang-ruby language-ruby">def index
+  Response.new.tap do |response|
+    response.body = &quot;Hello from users#index\n&quot;
+    response.status_code = 200
+  end
+end</code></pre>
+<p><code class="inline">tap</code> is another way to assign instance variables on a new object. Instead of</p>
+<pre><code class="ruby lang-ruby language-ruby">response = Response.new
+response.body = &quot;...&quot;
+
+return response</code></pre>
+<p>We can do</p>
+<pre><code class="ruby lang-ruby language-ruby">Response.new.tap do |response|
+  response.body = &quot;...&quot;
+end</code></pre>
+<p><code class="inline">tap</code> returns the newly created object instance.</p>
+<p>We didn’t <code class="inline">require</code> the newly added <code class="inline">response.rb</code>, so do that in <code class="inline">base_controller</code>. This will let all controllers access the <code class="inline">Response</code> object.</p>
+<pre><code class="ruby lang-ruby language-ruby">require File.join(File.dirname(__FILE__), &quot;..&quot;, &quot;..&quot;, &quot;lib&quot;, &quot;response&quot;)
+
+class BaseController
+  attr_reader :env
+
+  def initialize(env)
+    @env = env
+  end
+end</code></pre>
+<p>Okay. We actually have enough to see this working now. Let’s finally do something in <code class="inline">router#route_for</code>. Before doing so, review <code class="inline">lib/request_handler.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class RequestHandler
+  def call(env)
+    route = MainRackApplication.router.route_for(env)
+    if route
+      # stuff
+    else
+      return [404, {}, []]
+    end
+  end
+end</code></pre>
+<p><code class="inline">route</code> should be a <code class="inline">response</code> object, with the format of:</p>
+<pre><code class="ruby lang-ruby language-ruby">[status = 200, headers = {}, [body]]</code></pre>
+<p>For now, update the <code class="inline">if</code> statement to return the <code class="inline">route</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">if route
+  route
+else
+  return [404, {}, []]
+end</code></pre>
+<p>Now in <code class="inline">lib/router.rb</code>:</p>
+<pre><code class=" lang- language-">def route_for(env)
+  # this will get the first route, which is
+  # [&quot;/users&quot;, {:controller =&gt; &quot;UsersController&quot;, :method =&gt; &quot;index&quot;}]
+  route = @routes[:get].first
+
+  # route it is an array. We are interested in the options, which is accessible by route.last
+
+  options = route.last
+  
+  # create a new instance of the controller
+  # UsersController inherits from BasicController, where #initialize requires and `env` argument
+  controller = Module.const_get(options[:controller]).new(env)
+
+  # this line calls #index, which returns a response instance
+  res = controller.send(options[:method])
+  
+  # return the correctly formatted rack_response
+  res.rack_response
+end</code></pre>
+<p>If everything went well, you can restart the server and curling <strong>any</strong> url will return:</p>
+<pre><code class="sh lang-sh language-sh">Hello from users#index</code></pre>
+<h3>Dynamically selecting the correct route</h3>
+<p>That was a lot of hardcoding, but it appears to be working! Let’s refactor and allow the code to work for any route. The hardcode we need to make dynamic is:</p>
+<ul>
+<li><code class="inline">require</code> the correct class for each route
+</li>
+<li><code class="inline">send</code> the correct method for each request
+</li>
+</ul>
+<p> First, we can move the logic from <code class="inline">route_for</code> to a dedicated <code class="inline">route</code> object. Create <code class="inline">lib/route.rb</code>, and add:</p>
+<pre><code class="ruby lang-ruby language-ruby">require File.join(File.dirname(__FILE__), &#39;../&#39;, &#39;app&#39;, &#39;controllers&#39;, &#39;base_controller&#39;)
+
+class Route
+  attr_accessor :controller, :path, :instance_method
+
+  def initialize route_and_options
+    @path, options = route_and_options
+    
+    @controller = options[:controller]
+    @instance_method = options[:method]
+  end
+end</code></pre>
+<p>Each <code class="inline">route</code> will receive an array that has this shape:</p>
+<pre><code class="ruby lang-ruby language-ruby">[path = &quot;/users&quot;, {:controller =&gt; &quot;UsersController&quot;, :method =&gt; &quot;index&quot;}]</code></pre>
+<p>In <code class="inline">initialize</code> we assign the correct values to instance variables. The next thing is dynamically <code class="inline">require</code> the correct class:</p>
+<pre><code class="ruby lang-ruby language-ruby">def handle_requires
+  require File.join(File.dirname(__FILE__), &#39;../&#39;, &#39;app&#39;, &#39;controllers&#39;, underscore(@controller))
+end
+
+def underscore str
+  str.gsub(/::/, &#39;/&#39;).
+  gsub(/([A-Z]+)([A-Z][a-z])/,&#39;\1_\2&#39;).
+  gsub(/([a-z\d])([A-Z])/,&#39;\1_\2&#39;).
+  tr(&quot;-&quot;, &quot;_&quot;).
+  downcase
+end</code></pre>
+<p>We stole <code class="inline">underscore</code> from Rails - we need to change <code class="inline">UsersController</code> to <code class="inline">users_controller</code> and so forth.</p>
+<p>Now we just need the logic to choose the correct controller (we required all the controller, but we also need to create and instance) and then use <code class="inline">send</code> to call the correct instance method that corresponds to the request:</p>
+<pre><code class="ruby lang-ruby language-ruby">def klass
+  Module.const_get(@controller)
+end
+
+def execute(env)
+  klass.new(env).send(instance_method)
+end</code></pre>
+<p>Looking good. Now we can clean up the <code class="inline">route_for</code> method in <code class="inline">lib/router/rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">def route_for(env)
+  path = env[&quot;PATH_INFO&quot;]
+  method = env[&quot;REQUEST_METHOD&quot;].downcase.to_sym
+
+  route_and_options = routes[method].find { |route|
+    route.first == path
+  }
+  route_and_options ? Route.new(route_and_options) : nil
+end</code></pre>
+<p>Pretty simple. We just find the corresponding <code class="inline">method</code>, in this case <code class="inline">:get</code>, and the matching path. We could improve this by checking for Regexp like the <a href="https://isotope11.com/blog/build-your-own-web-framework-with-rack-and-ruby-part-2">original article</a>. For now, simple is good.</p>
+<p>Finally, we can update <code class="inline">lib/request_handler.rb</code>:</p>
+<pre><code class="ruby lang-ruby language-ruby">class RequestHandler
+  def call(env)
+    route = MainRackApplication.router.route_for(env)
+    if route
+      response = route.execute(env)
+      return response.rack_response
+    else
+      return [404, {}, []]
+    end
+  end
+end</code></pre>
+<p>And that’s it! We can match any static route. Try restarting the application and executing <code class="inline">curl localhost:9292/users/ -i</code> and you should see:</p>
+<pre><code class="sh lang-sh language-sh">HTTP/1.1 200 OK 
+Transfer-Encoding: chunked
+Server: WEBrick/1.3.1 (Ruby/2.3.3/2016-11-21)
+Date: Sun, 22 Apr 2018 11:52:07 GMT
+Connection: Keep-Alive
+
+Hello from users#index</code></pre>
+<h3>Conclusion</h3>
+<p>Long article, but I learned a lot. You can find the original article <a href="https://isotope11.com/blog/build-your-own-web-framework-with-rack-and-ruby-part-2">here</a>. Ruby is really nice to work with and has a lot of great utlities for simple metaprogramming.</p>
+
+  </div>
+</body>
+</html>

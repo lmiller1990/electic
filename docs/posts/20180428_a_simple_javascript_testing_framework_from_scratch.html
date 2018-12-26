@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180428 A Simple JavaScript Testing Framework from Scratch
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, I build a simple JavaScript framework from scratch. The framework will then be used to unit test itself
+The goal is to be able to run this:</p>
+<pre><code class="js lang-js language-js">describe(&#39;adder&#39;, () =&gt; {
+  it(&#39;adds two numbers&#39;, () =&gt; {
+    const result = adder(1, 2)
+    expect(result).toBe(3)
+  })
+})</code></pre>
+<p>Let’s get started. The full source code is <a href="https://gist.github.com/lmiller1990/8e17919503f119d656e96f55fccc4bc5">here</a> and tests are <a href="https://gist.github.com/lmiller1990/9432684bd15704d5e4aa5554b4b86aed">here</a>.</p>
+<p>Create a new file called <code class="inline">index.js</code>. The entire source code will live inside here. Let’s start from <code class="inline">describe</code>.</p>
+<h3>Describe</h3>
+<p>The <code class="inline">describe</code> function signature is <code class="inline">fn(description, callback)</code>. The first argument is simply a string describing the block, and the <code class="inline">callback</code> contains the actual test code to execute. It would be also be nice to print out the description when the test executes.</p>
+<p>Relatively straightforward! Another nice part of this we can have arbitrarily nested <code class="inline">describe</code> blocks. For example:</p>
+<pre><code class="js lang-js language-js">describe(&#39;outer&#39;, () =&gt; {
+  describe(&#39;inner&#39;, () =&gt; {
+  }
+}
+
+// outer
+// inner</code></pre>
+<p>Surprisingly simple. Moving on…</p>
+<h3>it</h3>
+<p><code class="inline">it</code> is actually easier to implement than <code class="inline">describe</code>, at least for this example. Why? Let’s take a look at the function signature. The first argument is a <code class="inline">message</code>, and the second is the <code class="inline">callback</code>:</p>
+<pre><code class="js lang-js language-js">fn(description, callback)</code></pre>
+<p>… which is identical to <code class="inline">describe</code>. Let’s just go ahead and use <code class="inline">describe</code>!</p>
+<pre><code class="js lang-js language-js">const it = (msg, fn) =&gt; describe(&#39;  &#39; + msg, fn)</code></pre>
+<p>Now we just need to implement <code class="inline">expect(....).toBe(...)</code>.</p>
+<h3>expect</h3>
+<p>Let’s start with <code class="inline">expect</code>. The function signature is as follows:</p>
+<pre><code class="js lang-js language-js">expect(value).toBe(value)</code></pre>
+<p>Since we want to chain <code class="inline">.toBe</code>, expect must return an object that has a toBe property that is a method.</p>
+<p>Start of by defining the expect method:</p>
+<pre><code class="js lang-js language-js">const expect = (exp) =&gt; matchers(exp)</code></pre>
+<p>Now we can type <code class="inline">expect(1)</code> . We just need an object with a <code class="inline">toBe</code> property, that does the comparison between the value passed to expect and the value passed to <code class="inline">toBe</code>.</p>
+<h3>matchers</h3>
+<p>The object returned by expect will contain at least one matcher, <code class="inline">toBe</code>, and possibly more in the future. It looks like this:</p>
+<pre><code class="js lang-js language-js">const matchers = (exp) =&gt; ({
+  toBe: (ass) =&gt; {
+    if (exp === ass) {
+      console.log(&#39;pass&#39;)
+      return true
+    } else {
+      console.log(&#39;fail&#39;)
+      return false
+    }
+  }
+})</code></pre>
+<p><code class="inline">exp</code> is the expected value, which is passed to expect. We need to pass it into matchers, to be able to make the comparison. toBe receives the assertion, which is what we expect to equal value passed to expect.</p>
+<p><code class="inline">toBe</code> is performing a strict comparison using <code class="inline">===.</code> This means <code class="inline">toBe</code> can only be used for primitives, such as String, Number and Boolean.</p>
+<p>This is all we need to be able to run the example code from the start of the article! The full source code with example as follows, and can be pasted into a single <code class="inline">index.js</code> and run using <code class="inline">node index.js</code>.</p>
+<pre><code class="js lang-js language-js">function adder(a, b) {
+  return a + b 
+}
+
+const describe = (desc, fn) =&gt; {
+  console.log(desc)
+  fn()
+}
+
+const it = (msg, fn) =&gt; describe(&#39;  &#39; + msg, fn)
+
+const matchers = (exp) =&gt; ({
+  toBe: (ass) =&gt; {
+    if (exp === ass) {
+      console.log(&#39;pass&#39;)
+      return true
+    } else {
+      console.log(&#39;fail&#39;)
+      return false
+    }
+  }
+})
+
+const expect = (exp) =&gt; matchers(exp)
+
+describe(&#39;adder&#39;, () =&gt; {
+  it(&#39;adds two numbers&#39;, () =&gt; {
+    const result = adder(1, 2)
+    expect(result).toBe(3)
+  })
+})
+
+module.exports = {
+  describe,
+  expect,
+  it,
+  matchers
+}</code></pre>
+<p>I am exporting the methods at the bottom of the file, so I can require and test them.</p>
+<h3>Testing the testing framework</h3>
+<p>As promised, we will test the framework using itself. I will write the tests in a file called <code class="inline">index.test.js</code>, which can be run using node <code class="inline">index.test.js</code>.</p>
+<p>First, a test on <code class="inline">describe</code>.</p>
+<h3>Testing <code class="inline">describe</code></h3>
+<p><code class="inline">describe</code>… actually doesn’t do much. It simply <code class="inline">console.log</code> a value, and executes the callback. We could mock <code class="inline">console.log</code> and ensure it is called, but that isn’t very interesting. Let’s focus on making sure the callback is called.</p>
+<pre><code class="js lang-js language-js">const {
+  describe,
+  it,
+  expect,
+  matchers 
+} = require(&#39;./index&#39;)
+
+let executes = 0
+const noop = () =&gt; { executes += 1 }
+
+describe(&#39;describe&#39;, () =&gt; {
+  it(&#39;returns a function&#39;, () =&gt; {
+    const actual = describe(&#39;&#39;, noop)
+
+    expect(executes).toBe(1)
+  }) 
+})</code></pre>
+<p>We start of by requiring all the functions we will test (and need to write the tests). We simply declare a <code class="inline">noop</code>, or no operation function that increments a value each time is it called — this is how we will assert that describe is calling the callback.</p>
+<p>Testing <code class="inline">describe</code> is now as simply as asserting executes has indeed increments, which reflects that the <code class="inline">noop</code> callback did indeed execute.</p>
+<h3><code class="inline">it</code></h3>
+<p><code class="inline">it</code> just calls <code class="inline">describe</code>, and does nothing different, so testing is isn’t very interesting. </p>
+<h3><code class="inline">expect</code></h3>
+<p><code class="inline">expect</code> is also very straight forward. expect returns an object, with a <code class="inline">toBe</code> property that is a <code class="inline">function</code>. </p>
+<pre><code class="js lang-js language-js">describe(&#39;expect&#39;, () =&gt; {
+  it(&#39;returns an object&#39;, () =&gt; {
+    const actual = expect(true)
+
+    expect(typeof actual).toBe(&#39;object&#39;)
+    expect(typeof actual.toBe).toBe(&#39;function&#39;)
+  })
+})</code></pre>
+<h3><code class="inline">matchers.toBe</code></h3>
+<p><code class="inline">toBe</code> is as simple to test as everything else. It should return <code class="inline">true</code> for when primitives are equal, such as <code class="inline">1 === 1</code>, and false for <code class="inline">1 === 2</code>.</p>
+<pre><code class="js lang-js language-js">describe(&#39;matchers&#39;, () =&gt; {
+  describe(&#39;toBe&#39;, () =&gt; {
+    it(&#39;works&#39;, () =&gt; {
+      const actual = matchers(&#39;1&#39;).toBe(&#39;1&#39;)
+
+      expect(actual).toBe(true)
+    })
+  })
+})</code></pre>
+<p>Writing false is exactly the same, so I won’t include it.</p>
+<h3>Conclusion and Improvements</h3>
+<p><code class="inline">index.js</code>, not including whitespace and exports , is less than 30 lines of code! This isn’t a very full featured framework by any means, but for just 30 lines, it’s relatively powerful. Adding more matchers as as simply as adding extra methods to matchers. </p>
+<p>Building <code class="inline">isEqual</code>, <code class="inline">isTruthy</code> and are trivial. Add more advanced matchers like <code class="inline">toHaveBeenCalled</code> , and other test features like spies and mock functions are some improvements I’d like to implement, as well as better error handling and logger.</p>
+
+  </div>
+</body>
+</html>

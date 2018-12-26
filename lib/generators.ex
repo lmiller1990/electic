@@ -6,6 +6,7 @@ defmodule Electic.Generators do
     files = files 
             |> Utils.remove_drafts
             |> Enum.sort
+            |> Enum.reverse
     
 
     posts = for file <- files do

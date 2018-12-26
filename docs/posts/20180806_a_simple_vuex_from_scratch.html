@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180806 A Simple Vuex From Scratch
+  </h1>
+
+  <div class="post_body">
+    <p>Build a simple Vuex implementation from scratch, in just 40 lines of code, complete with a reactive state and mutations.</p>
+<p>The source code for this implementation is so minimal in can be found in an entire gist, located <a href="https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b">here</a>. Published on 6/8/2018.</p>
+<h2>Creating a global <code class="inline">store</code> object</h2>
+<p>Let’s start by fleshing out the public API. We will let a user register the store using <code class="inline">Vue.use(Store)</code>. The actual store will be created using <code class="inline">new Store</code>, that takes an initial state and an object containing mutations. </p>
+<p>Let’s start creating and installing the store plugin. Vuex plugins are just objects that expose a <code class="inline">install</code> method, which receives the Vue instance as the first argument. I want to allow users to inject the store using the same API as Vuex:</p>
+<pre><code class="js lang-js language-js">new Vue({
+  el: &quot;#app&quot;,
+  store
+})</code></pre>
+<p>Values or objects passed to a Vue instance using the above syntax are exposed by <code class="inline">this.$options</code>. We can access the store by using <code class="inline">this.$options.store</code>, then assign it to a global <code class="inline">$store</code> property in the <code class="inline">beforeCreate</code> lifecycle method. Create a <code class="inline">store.js</code> file and add the following:</p>
+<pre><code class="js lang-js language-js">class Store {
+  static install(Vue) {
+    Vue.mixin({
+      beforeCreate() {
+        this.$store = this.$options.store 
+      }
+    })
+  }
+}</code></pre>
+<p>By using a <code class="inline">mixin</code>, all child Vue components will have the store added to their instance and made available using <code class="inline">$store</code>.</p>
+<p>Let’s try it out with Vue. Creating the following <code class="inline">index.html</code>:</p>
+<pre><code class="html lang-html language-html">&lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.17/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;store.js&quot;&gt;&lt;/script&gt;</code></pre>
+<p>Add add the following minimal Vue app to <code class="inline">store.js</code>:</p>
+<pre><code class="js lang-js language-js">document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  const el = document.createElement(&quot;div&quot;)
+  el.id = &quot;app&quot;
+  document.body.appendChild(el)
+
+  Vue.use(Store)
+  const store = new Store()
+
+  window.app = new Vue({ el, store })
+})</code></pre>
+<p>Open <code class="inline">index.html</code>, and <code class="inline">console.log(app.$store)</code> should show a empty <code class="inline">Store</code> object.</p>
+<h2>Adding a reactive global state</h2>
+<p>Now we have a global store object, let’s add the state. First, update the <code class="inline">store</code> class, adding a constructor that receives an object containing a <code class="inline">state</code> property. We will take advantage of the fact that all Vue components share the same <code class="inline">data</code> as the original Vue instance, and assign the <code class="inline">state</code> to a <code class="inline">$$state</code> variable. The <code class="inline">$$</code> simply represents a private variable - since Vue uses <code class="inline">$</code> to denote values attached to the prototype, I am using <code class="inline">$$</code> to simply convey this is a not part of the library’s public API.</p>
+<pre><code class="js lang-js language-js">class Store {
+  // ...
+  constructor({ state }) {
+    this.vm = new Vue({
+      data() {
+        return { $$state: state }
+      }
+    })
+  }
+}</code></pre>
+<p>Lastly, when the user calls <code class="inline">$store.state</code>, we should return the <code class="inline">$$state</code> we just assigned. We can do so using a JavaScript <code class="inline">getter</code>:</p>
+<pre><code class=" lang- language-">class Store {
+  // ...
+
+  get state() {
+    return this.vm.$data.$$state
+  }
+}</code></pre>
+<p>Update the minimal Vue app so the store instance receives an initial state, and the Vue app has a template that renders the state:</p>
+<pre><code class="js lang-js language-js">document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  const el = document.createElement(&quot;div&quot;)
+  el.id = &quot;app&quot;
+  document.body.appendChild(el)
+
+  Vue.use(Store)
+  const store = new Store({ state: { count: 0 } })
+
+  window.app = new Vue({ 
+    el, 
+    store,
+    template: `
+      &lt;div&gt;{{ $store.state.count }}&lt;/div&gt;
+    `
+  })
+})</code></pre>
+<p>If everything went well, you should see 0 rendered!</p>
+<h2>Implementing Mutations</h2>
+<p>Now the store has a <code class="inline">state</code>, but no way to update it. Let’s implement mutations. First, update the <code class="inline">constructor</code> to receive <code class="inline">mutations</code>:</p>
+<pre><code class="js lang-js language-js">class Store {
+  // ...
+
+  constructor({ state, mutations }) {
+    this.mutations = mutations
+
+    // ...
+  }
+
+  // ...
+}</code></pre>
+<p>Create an <code class="inline">increment</code> mutation and pass it to the instance of the store:</p>
+<pre><code class="js lang-js language-js">// ...
+document.addEventListener(&quot;DOMContentLoaded&quot;, () =&gt; {
+  const mutations = {
+    increment(state, { amount }) {
+      state.count = state.count + amount
+    }
+  }
+
+  const store = new Store({ state: { count: 0 }, mutations })
+ 
+   // ...
+})</code></pre>
+<p>Now we need a way to call the mutation. Add a <code class="inline">commit</code> method to the <code class="inline">Store</code> class:</p>
+<pre><code class="js lang-js language-js">commit(handler, payload) {
+  this.mutations[handler](this.state, payload)
+}</code></pre>
+<p>This will get the correct mutations using the <code class="inline">handler</code>, and pass the state and payload as arguments. For example, <code class="inline">commit(&#39;increment&#39;, { amount: 1 })</code> will call <code class="inline">mutations[&#39;increment&#39;]</code>, passsing the <code class="inline">state</code> and the <code class="inline">payload</code>.</p>
+<p>The last thing to do is update the <code class="inline">template</code> to actually commit a mutation:</p>
+<pre><code class="js lang-js language-js">window.app = new Vue({ 
+  el, 
+  store,
+  template: `
+    &lt;div&gt;
+      {{ $store.state.count }}
+      &lt;button @click=&quot;$store.commit(&#39;increment&#39;, { amount: 1 })&quot;&gt;
+        Increment
+      &lt;/button&gt;
+    &lt;/div&gt;
+  `
+})</code></pre>
+<p>If you did everything correctly, click the button should increment <code class="inline">count</code> by 1.</p>
+<h2>Conclusion</h2>
+<p>This article covered a lot of interesting things:</p>
+<ul>
+<li>using <code class="inline">install</code> to initialize a plugin, and extend child components with <code class="inline">Vue.mixin</code>
+</li>
+<li>accessing an object passed to a newly created <code class="inline">Vue</code> instance with <code class="inline">this.$options.store</code>
+</li>
+<li>using a JavaScript <code class="inline">getter</code> to return a specific object when a property is accessed
+</li>
+</ul>
+<p>I did not implement <code class="inline">actions</code>, but doing so is similar to mutations. You probably want to return a <code class="inline">Promise</code>, and perhaps use <code class="inline">bind</code> and pass a reference to <code class="inline">commit</code>, so you can update the state from an action by committing a mutation.</p>
+<p>The source code for this implementation is so minimal in can be found in an entire gist, located <a href="https://gist.github.com/lmiller1990/8a5cea45752e3692281b72ce08722b0b">here</a>.</p>
+
+  </div>
+</body>
+</html>

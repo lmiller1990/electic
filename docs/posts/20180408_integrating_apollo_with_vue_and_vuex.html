@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180408 Integrating Apollo with Vue and Vuex
+  </h1>
+
+  <div class="post_body">
+    <p>My previous article discussed how to setup a simple GraphQL server and query it from a Vue frontend. For my personal projects, I believe this is adequate, however a more common solution in complex, production applications is a framework to bring some structure and extra features to your stack. Apollo is one such framework.</p>
+<p>To demonstrate how to use Apollo with Vue and Vuex, we will be building the following app:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/app.png" alt=""/></p>
+<p>The app shows a list of programming languages, and fetches the frameworks for each when selected. I will be building both the GraphQL backend and Vue frontend, using Apollo on both the server and client.</p>
+<p>The link to the source code for this project is <a href="https://github.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
+<h2>What is Apollo?</h2>
+<p>Apollo actual refers to a few things.</p>
+<p><strong>The Apollo Platform</strong>, or just Apollo for short: a family of technologies that you can incrementally add to your stack, including:</p>
+<ul>
+<li>Apollo Client: a client side framework to help manage GraphQL queries, their resulting data, and other related features such as caching
+</li>
+<li>Apollo Engine: Analytics and more for your Apollo-based applications
+</li>
+<li>Apollo Server: a server side framework for building GraphQL servers
+</li>
+</ul>
+<p>If you are new to GraphQL, you should try <strong>without</strong> Apollo first. Frameworks are a great way to boost productivity, but I believe it is critical to understand the underlying infrastructure. Learning Apollo without at least a basic understanding of GraphQL would be like learning Vue or React without learning some HTML and JavaAScript first.</p>
+<p>With that out of the way, let’s get started. I will cover the following topics:</p>
+<ul>
+<li>A simple backend using Apollo Server (and constrast it to a regular GraphQL backend)
+</li>
+<li>Use Apollo Client in a Vue app, to fetch and display data from the GraphQL backend
+</li>
+<li>How to integrate Apollo into existing apps using Vuex
+</li>
+<li>Look at some of the basic merits to using Apollo (primarily, caching)
+</li>
+</ul>
+<p>One thing I will not be doing is using the VueApollo library. Apollo Client bills itself as having integration with all the popular frontends, but I think it’s good to see what it looks like without the integration. This makes the benefits of libraries like VueApollo more apparently when you use them.</p>
+<h2>Building the server</h2>
+<p>Let’s build a simple server. The server will show a bunch of programming languages, and let us view frameworks built with them in detail. </p>
+<h3>Installation:</h3>
+<p>We will be using the vue-cli to bootstrap a Vue app. Install that, and initialize a new project:</p>
+<pre><code class=" lang- language-">vue create apollo-vuex-graphql</code></pre>
+<p><code class="inline">cd</code> in there, and install the server side packages.</p>
+<pre><code class=" lang- language-">npm install apollo-server-express body-parser cors express graphql-tools</code></pre>
+<p>This is what each package does:</p>
+<ul>
+<li>apollo-server-express: Apollo Server + integration with express
+</li>
+<li>body-parser: so express can parse the request body
+</li>
+<li>cors: will let our Vue app query the backend from a different port
+</li>
+<li>graphql: dependency of apollo-server-express
+</li>
+<li>graphql-tools: some utilities to build GraphQL schemas, often used with Apollo Server. Maintained by the Apollo team.
+</li>
+</ul>
+<p>Next, create a folder for the server called <code class="inline">server</code>, and create <code class="inline">server/index.js</code>. This is where the server will go. We also need some data, which I will save in <code class="inline">server/database.js</code>, so create that too, so create that too. Here is some nice mock data, which should be put in <code class="inline">server/database.js</code>.</p>
+<pre><code class="js lang-js language-js">class Language {
+  constructor(id, name, frameworksById) {
+    this.id = id
+    this.name = name
+    this.frameworksById = frameworksById
+  }
+}
+
+class Framework {
+  constructor(id, name) {
+    this.id = id
+    this.name = name
+  }
+}
+
+
+const frameworks = [
+  new Framework(1, &#39;Vue&#39;),
+  new Framework(2, &#39;React&#39;),
+  new Framework(3, &#39;Ember&#39;),
+  new Framework(4, &#39;Angular&#39;),
+  new Framework(5, &#39;Preact&#39;),
+
+  new Framework(6, &#39;Rails&#39;),
+  new Framework(7, &#39;Phoenix&#39;),
+  new Framework(8, &#39;Laravel&#39;),
+]
+
+const languages = [
+  new Language(1, &#39;JavaScript&#39;, [1, 2, 3, 4, 5]),
+  new Language(2, &#39;Ruby&#39;, [6]),
+  new Language(3, &#39;Elixir&#39;, [7]),
+  new Language(4, &#39;PHP&#39;, [8]),
+]
+
+module.exports = {
+  Language,
+  Framework,
+  languages,
+  frameworks,
+}</code></pre>
+<p>Great. Time to get started on the server. Open <code class="inline">server/index.js</code> and <code class="inline">require</code> the necessary packages:</p>
+<pre><code class="js lang-js language-js">// modules
+const express = require(&#39;express&#39;)
+const cors = require(&#39;cors&#39;)
+const bodyParser = require(&#39;body-parser&#39;)
+const { graphqlExpress, graphiqlExpress } = require(&#39;apollo-server-express&#39;)
+const { makeExecutableSchema } = require(&#39;graphql-tools&#39;)
+
+// the mock data and classes
+const { Language, Framework, languages, frameworks } = require(&#39;./database&#39;)</code></pre>
+<p>Now we have required the necessary packages. Building the server involves:</p>
+<ul>
+<li>defining the queries and types, (called <code class="inline">typeDefs</code> by Apollo)
+</li>
+<li>implementing the queries (called <code class="inline">resolvers</code> by Apollo)
+</li>
+<li>starting the app with some middleware and listening 
+</li>
+</ul>
+<h3>Defining the type and queries</h3>
+<p>Queries and types are defined in the same structure, called <code class="inline">typeDefs</code>. Let’s start of with a single query, to make sure everything is working:</p>
+<pre><code class="js lang-js language-js">const typeDefs = `
+  type Query {
+    languages: [Language]
+  }
+
+  type Language {
+    id: ID!
+    name: String!
+  }
+`</code></pre>
+<p>This is usually done using <code class="inline">buildSchema</code> when using <code class="inline">graphql.js</code>, without Apollo.</p>
+<h3>Implementing the resolvers</h3>
+<p>We have to implement a resolver for the <code class="inline">languages</code> query. This is done in a <code class="inline">resolvers</code> object. If you have used <code class="inline">graphql.js</code>, this is the <code class="inline">rootValue</code> object.</p>
+<pre><code class="js lang-js language-js">const resolvers = {
+  Query: {
+    languages: () =&gt; languages
+  }
+}</code></pre>
+<p>We just return the <code class="inline">languages</code> array, which we required from <code class="inline">database.js</code>.</p>
+<h3>Create the schema</h3>
+<p>We use <code class="inline">makeExecutableSchema</code> from the <code class="inline">graphql-tools</code> module to pull everything together. This is <code class="inline">graphqlHTTP</code> in <code class="inline">graphql.js,</code> but can do a <a href="https://www.apollographql.com/docs/graphql-tools/generate-schema.html#makeExecutableSchema">whole bunch of other things</a>. We will just use the basic options.</p>
+<pre><code class="js lang-js language-js">const schema = makeExecutableSchema({
+  typeDefs,
+  resolvers,
+})</code></pre>
+<h3>Start the server</h3>
+<p>Now we just need to start the server. We use <code class="inline">cors</code> to let us make requets from another port (the Vue app will be running on port 8080). We also want to enable graphliql, so we can test queries easily.</p>
+<pre><code class="js lang-js language-js">const app = express()
+app.use(cors())
+
+// actual graphql endpoint
+app.use(&#39;/graphql&#39;, bodyParser.json(), graphqlExpress({ schema }))
+
+// use graphiql as well
+app.use(&#39;/graphiql&#39;, graphiqlExpress({ endpointURL: &#39;graphql&#39; }))
+
+app.listen(5000, () =&gt; &#39;Listening on port 5000&#39;)</code></pre>
+<p>Now run <code class="inline">node server</code>. If you typed everything correctly, visiting <code class="inline">localhost:5000/graphiql</code> should show:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/graphiql_query.png" alt=""/></p>
+<p>Try executing the query:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/graphiql_screenshot.png" alt=""/></p>
+<p>Okay, looking good. We will come back and implement two more queries, <code class="inline">getLanguage(id)</code> and <code class="inline">getFramework(id)</code> soon. First, let’s see how to access the data using Apollo Client.</p>
+<h2>Apollo Client</h2>
+<p>Apollo Client will let us easily query the server we just built. You can customize the Apollo Client in a number of ways. To let people get started quickly, the team provides a preconfigured client called <code class="inline">apollo-boost</code>. It includes a number of packages, such as:</p>
+<ul>
+<li>apollo-client: “Where all the magic happens”
+</li>
+<li>apollo-cache-inmemory: the recommended cache
+</li>
+<li>graphql-tag: a package to assist in writing and parseing GraphQL queries
+</li>
+</ul>
+<p>Read the full details <a href="https://www.npmjs.com/package/apollo-boost">here</a>.</p>
+<p>We will also install Vue Router and Vuex, which we will be using. Install these packages by runnning:</p>
+<pre><code class="sh lang-sh language-sh">npm install apollo-boost vuex vue-router</code></pre>
+<p>First, we need to create a new <code class="inline">ApolloClient</code>. Make a file inside <code class="inline">src</code> called <code class="inline">apolloClient.js</code> and add the following:</p>
+<pre><code class="js lang-js language-js">import ApolloClient from &#39;apollo-boost&#39;
+
+export default new ApolloClient({
+  uri: &#39;http://localhost:5000/graphql&#39;
+})</code></pre>
+<p>There are many options you can provide, for now we are just telling ApolloClient which endpoint to query. For convinience, we will attach the <code class="inline">ApolloClient</code> instance to the <code class="inline">Vue</code> prototype. Head over to <code class="inline">src/main.js</code>, and add the following:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import App from &#39;./App.vue&#39;
+import apollo from &#39;./apolloClient&#39;
+
+Vue.config.productionTip = false
+Vue.prototype.$apollo = apollo
+
+new Vue({
+  render: h =&gt; h(App)
+}).$mount(&#39;#app&#39;)</code></pre>
+<p>Now we can perform queries anywhere by running <code class="inline">this.$apollo.query(...)</code>. Let’s try it out in <code class="inline">src/App.vue</code>:</p>
+<pre><code class="js lang-js language-js">// script section of App.vue
+import gql from &#39;graphql-tag&#39;
+
+export default {
+  name: &#39;app&#39;,
+
+  async created() {
+    const response = await this.$apollo.query({
+      query: gql`
+      query Languages {
+        languages {
+          id
+          name
+        }
+      }`
+    })
+    console.log(response.data.languages)
+  }
+}</code></pre>
+<p>Next, we import <code class="inline">graphql</code> as <code class="inline">gql</code>. This makes writing GraphQL queries a bit nicer - see the syntax without <code class="inline">gql</code> in my previous article. We can now simply copy paste the test query from graphiql, and <code class="inline">console.log</code> the response. </p>
+<p>Start the Vue app by running <code class="inline">npm run serve</code> and visit <code class="inline">localhost:8080</code>. If everything went well, you can open the console and see:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/initial_query.png" alt=""/></p>
+<p>So everything is working - but we haven’t seen anything different or exciting yet. We could have achieved this without Apollo. Let’s take a look at what Apollo can do for us.</p>
+<h3>Caching requests</h3>
+<p>To see this in action, let’s add some delay to our server response intentionally. This will simulate a slow connection.</p>
+<p>In <code class="inline">server/index.js</code>, add the following function:</p>
+<pre><code class="js lang-js language-js">const delay = () =&gt; new Promise(res =&gt; {
+  setTimeout(() =&gt; {
+    res(true)
+  }, 1000)
+})</code></pre>
+<p>Calling <code class="inline">await delay()</code> will cause the server to wait. Update <code class="inline">resolvers</code> to use <code class="inline">delay</code>:</p>
+<pre><code class="js lang-js language-js">const resolvers = {
+  Query: {
+    languages: async () =&gt; {
+      await delay()
+      return languages
+    }
+  }
+}</code></pre>
+<p>It will be beneficial to see just how much time passes when <code class="inline">getLanguages</code> is called. Move the query from <code class="inline">created</code> to a method called <code class="inline">getLanguages</code>. We will also add a button that will manually trigger <code class="inline">getLanguages</code>. Update <code class="inline">src/App.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;button @click=&quot;getLanguages&quot;&gt;Get Languages&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import gql from &#39;graphql-tag&#39;
+
+export default {
+  name: &#39;app&#39;,
+
+  async created() {
+    await this.getLanguages()
+  },
+
+  methods: {
+    async getLanguages() {
+      console.time(&#39;getLanguages&#39;)
+      const response = await this.$apollo.query({
+        query: gql`
+        query Languages {
+          languages {
+            id
+            name
+          }
+        }`
+      })
+      console.log(response.data.languages)
+      console.timeEnd(&#39;getLanguages&#39;)
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>The console should now output the time:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/get_languages.png" alt=""/></p>
+<p>It took 1048ms. 1000ms was from <code class="inline">delay</code>. Try clicking the button a few more times. You should see:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/get_languages_2.png" alt=""/></p>
+<p>Every call to <code class="inline">getLanguages</code> after the first completes in around 10ms - almost immediately. This is ApolloClient’s <strong>cache</strong> in action. Apollo remembers you executed <code class="inline">getLanguages</code> once already, and instead of making another request to the server, it responds with the previous result, that was cached.</p>
+<p>Try adding <code class="inline">this.$apollo.resetStore()</code> after <code class="inline">console.timeEnd()</code>, and clicking the button a bunch more times. </p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/get_languages_3.png" alt=""/></p>
+<p><code class="inline">resetStore</code> clears Apollo’s store and cache, which is where the result of the queries executed are saved by default. Sinc we are clearing the store, Apollo is now executing the query and hitting the server each time you click the button. </p>
+<p><code class="inline">resetStore</code> can be useful in situations such as when a user logs out, and you want to clear all the data related to that user.</p>
+<h2>Another global store?</h2>
+<p>Now we have two ways to store data in large apps - Vuex/Redux, and Apollo’s cache optimized store. This brings up the question:  <strong>Where does global state belong?</strong> </p>
+<p>If you have been working with Vue or React, you are probably used to storing data in a Vuex or Redux store. Now we are introducing Apollo, we have <em>two</em> stores. You can view the Apollo store by doing:</p>
+<pre><code class="js lang-js language-js">console.log(this.$apollo.store)</code></pre>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/apollo_store.png" alt=""/></p>
+<p>Interesting enough, Apollo’s store and cache are <strong>reactive</strong>, much like Vue and React’s reactivity. If a query or mutation modifies some data, all other references to it will be automatically updated in the Apollo store. </p>
+<p>To connect the Apollo store to your frontend, and receive reactive updates to your UI, you can use <a href="https://github.com/apollographql/react-apollo">React Apollo</a> or <a href="https://github.com/Akryum/vue-apollo">VueApollo</a>. VueApollo programmatically defines reactive properties using Vue’s reactivity system, based on the result of ApolloClient query and mutation results. ReactApollo likely does the same thing, and actually used Redux internally until version 2. </p>
+<p>Basically, the client implementations provide some utilties to integrate Apollo’s cache/store with the UI framework’s reactivity system - a <strong>reactive, global store</strong>, sort of similar to Vuex and Redux. There is a library called <a href="https://github.com/apollographql/apollo-link-state">Apollo link state</a>, which lets you query the state, similar to what Vuex getters are used for.</p>
+<p>I still like the Flux architecture lays out, and how clean the separation of data and UI becomes, as well as how easy it is to test mutations/reducers. I also like the benefits of Apollo (optimized GraphQL queries, automatically caching). Let’s try and establish a simple pattern, that will let you integrate Apollo into your existing Vue/Vuex apps gradually, without ditching your existing Vuex store. Then I will talk about how to can use Apollo entirely, as a replacement for a global state store.</p>
+<h3>Creating the Vuex store</h3>
+<p>Create a new file for the Vuex store: <code class="inline">src/store.js</code>, and add the following:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import Vuex from &#39;vuex&#39;
+import gql from &#39;graphql-tag&#39;
+import apollo from &#39;./apolloClient&#39;
+
+Vue.use(Vuex)
+
+const state = {
+  languageIds: [],
+  languages: {}
+}
+
+const mutations = {
+  SET_LANGUAGES (state, { languages }) {
+    const ids = languages.map(x =&gt; x.id)
+    for (let id in ids) {
+      if (!state.languageIds.includes(ids[id])) {
+        state.languageIds.push(ids[id])
+      }
+    }
+
+    for (let l in languages) {
+      const language = languages[l]
+      state.languages = {
+        ...state.languages, 
+        [language.id]: {
+          ...state.languages[language.id], 
+          ...language
+        },
+      }
+    }
+  },
+}
+
+const actions = {
+  async getLanguages({ commit }) {
+    console.time(&#39;getLanguages&#39;)
+
+    const response = await apollo.query({
+      query: gql`
+      query Languages {
+        languages {
+          id
+          name
+        }
+      }
+      `
+    })
+
+    const { languages } = response.data
+    commit(&#39;SET_LANGUAGES&#39;, { languages })
+
+    console.timeEnd(&#39;getLanguages&#39;)
+  }
+}
+
+export default new Vuex.Store({
+  state, mutations, actions
+})</code></pre>
+<p>This is pretty standard Vuex. We import <code class="inline">apollo</code> from ‘./apolloClient’, and just moved the query into an action. We also added mutation, <code class="inline">SET_LANGUAGES</code>, to add the data to the store’s <code class="inline">state</code>.</p>
+<h3>Adding Vue Router</h3>
+<p>We will also add Vue Router, which we will use soon. Create <code class="inline">src/router.js</code>, and inside add the following:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import VueRouter from &#39;vue-router&#39;
+Vue.use(VueRouter)
+
+export default new VueRouter({
+})</code></pre>
+<p>We will add some routes soon. Import the router and store in <code class="inline">src/main.js</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import App from &#39;./App.vue&#39;
+import apollo from &#39;./apolloClient&#39;
+import store from &#39;./store&#39;
+import router from &#39;./router&#39;
+
+Vue.config.productionTip = false
+Vue.prototype.$apollo = apollo
+
+new Vue({
+  store,
+  router,
+  render: h =&gt; h(App)
+}).$mount(&#39;#app&#39;)</code></pre>
+<p>Lastly, update <code class="inline">src/App.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;router-link 
+      v-for=&quot;id in $store.state.languageIds&quot;
+      :key=&quot;id&quot;
+      :to=&quot;id&quot;
+    &gt;
+      {{ $store.state.languages[id].name }}
+    &lt;/router-link&gt;
+
+    &lt;router-view&gt;&lt;/router-view&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+
+export default {
+  name: &#39;app&#39;,
+
+  async created() {
+    await this.$store.dispatch(&#39;getLanguages&#39;)
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>We are now rendering the languages in <code class="inline">&lt;router-link&gt;</code>, which currently go nowehere. We are also no longer writing the data fetching logic in the component. Now we can easily test the component by mocking the <code class="inline">dispatch</code>. </p>
+<p>You should see this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/languages_render.png" alt=""/></p>
+<p>Now we get ApolloClient’s caching, with the usual Vuex flow. We are completely ignoring some of Apollo’s great features, like the reactive store, though. More on this later.</p>
+<h3>Adding a query with variables</h3>
+<p>Let’s add some more queries to the server, which will let us see Apollo in action a bit more. Update <code class="inline">server/index.js</code>:</p>
+<pre><code class="js lang-js language-js">const typeDefs = `
+  type Query {
+    languages: [Language]
+    getLanguage(id: ID!): Language
+  }
+
+  // ...
+}
+
+const resolvers = {
+  Query: {
+    // ... 
+    getLanguage: async (_, { id }) =&gt; {
+      await delay() 
+      return languages.find(x =&gt; x.id === parseInt(id))
+    }
+  }
+}</code></pre>
+<p>You are probably wondering what the <code class="inline">_</code> argument is. Read more <a href="https://www.apollographql.com/docs/graphql-tools/resolvers.html#Resolver-function-signature">here</a>. It is the <code class="inline">rootValue</code> object from the <code class="inline">graphql.js</code> API - it is not used that often. There are actually a few more arguments received by resolvers:</p>
+<ul>
+<li><code class="inline">obj</code> - the <code class="inline">rootValue</code> object
+</li>
+<li><code class="inline">data</code> - the data passed to the query. In our case, <code class="inline">id</code>, which we destructure
+</li>
+<li><code class="inline">context</code> - the context object, which can be used to hold information like authentication and so forth
+</li>
+<li><code class="inline">info</code> - I am not sure what this does, the documentation says it is only used in advanced cases
+</li>
+</ul>
+<p>Let’s try the new query in graphiql:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/get_language_by_id.png" alt=""/></p>
+<p>Finally, a Vuex action to fetch the data:</p>
+<pre><code class="js lang-js language-js">  async getLanguage({ commit }, id) {
+    console.time(`getLangById ${id}`)
+
+    const query = gql`
+      query GetLanguage($id: ID!) {
+        getLanguage(id: $id) {
+          id
+          name
+        }
+      }`
+
+    const variables = {
+      id: id 
+    }
+
+    const response = await apollo.query({
+      query, variables
+    })
+
+    commit(&#39;UPDATE_LANGUAGE&#39;, { id, data: response.data.getLanguage })
+
+    console.log(response.data.getLanguage)
+    console.timeEnd(`getLangById ${id}`)
+  },</code></pre>
+<p>Make sure the <code class="inline">variables</code> object is defined outside the <code class="inline">gql</code> query. I was trying to include it in the <code class="inline">gql</code> tag and couldn’t figure out why it wouldn’t work. <code class="inline">gql</code> only parses <strong>queries</strong>, not variables.</p>
+<p>Here is the matching mutation to save the result of <code class="inline">getLanguage</code>:</p>
+<pre><code class=" lang- language-">UPDATE_LANGUAGE(state, { id, data }) {
+  if (!state.languageIds.includes(id)) {
+    state.languageIds.push(id)
+  }
+  state.languages = {...state.languages, [id]: {...data}}
+}</code></pre>
+<h3>Adding another route component</h3>
+<p>To see this new query in action, we will add a <code class="inline">&lt;LanguageContainer&gt;</code> component, which will handle fetching the frameworks for each language. Create a <code class="inline">&lt;LanguageContainer</code>&gt; component in <code class="inline">src</code>: <code class="inline">src/LanguageContainer.vue</code>. Then enter the following:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div v-if=&quot;language&quot;&gt;
+    &lt;h3&gt;{{ language.name }}&lt;/h3&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  name: &#39;LanguageContainer&#39;,
+
+  computed: {
+    language() {
+      return this.$store.state.languages[this.$route.params.id]
+    }
+  },
+
+  watch: {
+    &#39;$route.params.id&#39;: { 
+      handler (val) {
+        this.$store.dispatch(&#39;getLanguage&#39;, val)
+      },
+      immediate: true
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>We will add the route in <code class="inline">routes.js</code> in a moment. We are using <code class="inline">watch</code> to dispatch the <code class="inline">getLanguage</code> action we made earlier. We can also add <code class="inline">immediate: true</code> to dispatch as soon as we visit the route, as well as each time it changes. The <code class="inline">id</code> will be taken from the <code class="inline">$route</code>, which was set up earlier when we wrote <code class="inline">&lt;router-link :to=&quot;lang.id&gt;</code> in <code class="inline">src/App.vue</code>. Go ahead and add <code class="inline">LanguageContainer</code> to <code class="inline">src/routes.js</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import VueRouter from &#39;vue-router&#39;
+import LanguageContainer from &#39;./LanguageContainer&#39;
+import App from &#39;./App&#39;
+Vue.use(VueRouter)
+
+export default new VueRouter({
+  routes: [
+    {
+      name: &#39;language-container&#39;,
+      path: &#39;/:id&#39;,
+      component: LanguageContainer,
+    }
+  ]
+})</code></pre>
+<p>Head back to the Vue app, and try clicking on JavaScript. You should be directed to <code class="inline">localhost:8080/1</code>, and you should see:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/get_language_working.png" alt=""/></p>
+<p>We fetche data using a query with variables! However, we don’t have the frameworks yet.</p>
+<h3>Improve the getLanguage query</h3>
+<p>Let’s update the <code class="inline">Language</code> class, and the <code class="inline">getLanguage</code> query. Starting with <code class="inline">Language</code> in <code class="inline">server/database.js</code>, we will add a new method, <code class="inline">frameworks</code>:</p>
+<pre><code class="js lang-js language-js">class Language {
+  // ...
+
+  frameworks() {
+    return this.frameworksById.map(id =&gt; frameworks.find(y =&gt; y.id === id))
+  }
+}</code></pre>
+<p><code class="inline">frameworks</code> will return a nice <code class="inline">Array</code> of <code class="inline">Framework</code> objects. Head over to <code class="inline">server/index.js</code>, and update <code class="inline">typeDefs</code>:</p>
+<pre><code class="js lang-js language-js">const typeDefs = `
+  type Query {
+    languages: [Language]
+    getLanguage(id: ID!): Language
+  }
+
+  type Language {
+    id: ID!
+    name: String!
+    frameworks: [Framework]
+  }
+    
+  type Framework {
+    id: ID!
+    name: String
+  }
+`</code></pre>
+<p>We added <code class="inline">frameworks: [Framework]</code> to the <code class="inline">Language</code> type, and a <code class="inline">Framework</code> type. That’s it! Head over to <code class="inline">localhost:5000/graphiql</code>, and get ready to feel the power of GraphQL. </p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/graphiql_frameworks.png" alt=""/></p>
+<p>Looking good.</p>
+<h3>Showing frameworks on the client</h3>
+<p>Update <code class="inline">getLanguage</code> in <code class="inline">src/store.js</code>:</p>
+<pre><code class="js lang-js language-js">async getLanguage({ commit }, id) {
+  // ...
+
+  const query = gql`
+    query GetLanguage($id: ID!) {
+      getLanguage(id: $id) {
+        id
+        name
+        frameworks {
+          name
+        }
+      }
+    }`
+
+  // ..
+}</code></pre>
+<p>We simply added the name of the field we want, <code class="inline">frameworks</code>, and the <code class="inline">name</code> property. The rest is left up to GraphQL + Apollo Server.</p>
+<p>Let’s display the frameworks! Update <code class="inline">&lt;LanguageContainer&gt;</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div v-if=&quot;language&quot;&gt;
+    &lt;h3&gt;{{ language.name }}&lt;/h3&gt;
+    &lt;div 
+      v-for=&quot;framework in language.frameworks&quot;
+      :key=&quot;framework.id&quot;
+    &gt;
+      {{ framework.name }}
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</code></pre>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/show_frameworks.png" alt=""/></p>
+<h3>More on Apollo caching</h3>
+<p>The above demonstrates Apollo’s smart caching again. Try clicking the link for a language. It should take a second to show the frameworks, due to the artificial delay we added. Try changing between languages - when you visit the link for a language you previously visited, the frameworks should display immediately. This is because Apollo cached the data, and instead of hitting the endpoint again, used the previous result.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-apollo-graphql/master/screenshots/fast_fetch.png" alt=""/></p>
+<p>See how the first <code class="inline">getLangById</code> call took 1062ms, but the second only 14ms?</p>
+<h3>Thoughts on Vuex with Apollo</h3>
+<p>While we get Apollo’s convinient caching, we are ignoring a number of features, namely it’s own reative store, and how it normalizes data in the store, to optimize performance. We had to write the usual Vuex boilerplate action -&gt; mutation. </p>
+<p>There is an alternative. Apollo has a library called <a href="https://raw.githubusercontent.com/apollographql/apollo-link-state">link state</a>.</p>
+<p>The idea of link state is to let Apollo automatically store the result of the queries, and instead of using something like Vuex modules to structure the data, and getters/computed properties to get the data you want from the store, you simply query the Apollo data store for what you want. </p>
+<p>Basically, instead of thinking about how to structure you Vuex store, you simply let Apollo figure how out to structure the data. Then you simply write GraphQL queries (perhaps in <code class="inline">methods</code>, for example) and ask Apollo for whatever data you want.</p>
+<p>While Apollo’s store is reactive internally, because Vue does not have knowledge of the Apollo store, you cannot simply use <code class="inline">computed</code> properties to watch the Apollo store. To integrate Apollo with Vue, you can use <a href="https://raw.githubusercontent.com/Akryum/vue-apollo">VueApollo</a>. There is <a href="https://www.apollographql.com/docs/react/integrations.html">integration for most popular frameworks</a>.</p>
+<p>Now I have an understanding of how Apollo works, I would like to try out VueApollo soon. The idea of leaving the store to Apollo and simply querying for the data I want is appealing. I think that approach might be great for new applications, but if you want to slowly integrate Apollo to an existing app that is using Vuex, perhaps the way presented in this article is a good way to get started. It allows since you to take advantage of Apollo’s caching, and move from an existing (probably REST) API to a GraphQL API without changing you application’s structure significantly.</p>
+<p>The link to the source code for this project is <a href="https://github.com/lmiller1990/vue-apollo-graphql">here</a>.</p>
+
+  </div>
+</body>
+</html>

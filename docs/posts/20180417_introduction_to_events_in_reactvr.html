@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180417 Introduction to Events in ReactVR
+  </h1>
+
+  <div class="post_body">
+    <p>ReactVR is an exciting new way to build 3D and VR environments, which can be easily deployed and accessed in a browser. One of the first things you will want to do in any web app is allow the user to interact with your creation. This leads to the topic of this post, handling events in ReactVR.</p>
+<p>The source code for this article is <a href="https://github.com/lmiller1990/react-vr-events-examples">here</a>.</p>
+<h2>Setup</h2>
+<p>There are lots of guides to get ReactVR set up. You can follow the <a href="https://facebook.github.io/react-vr/docs/getting-started.html">official documentation</a>. Basically:</p>
+<pre><code class=" lang- language-">npm install -g react-vr-cli
+react-vr init EventsInReactVR
+cd EventsInReactVR
+npm start</code></pre>
+<p>Visiting <code class="inline">localhost:8081/vr</code> should yield the “hello” as shown in the official docs.</p>
+<p>Before adding some code, let’s talk about two important concepts.</p>
+<h2>Cursors in Input</h2>
+<p>When handling eventsin ReactVR, there are two prerequisites you need to know about. <strong>Cursors</strong>, which let you trigger events, and <strong>inputs</strong>, which let you respond to them.</p>
+<h3>Cursors</h3>
+<p>ReactVR implements cursors as <strong>raycasters</strong>. You can read more <a href="https://en.wikipedia.org/wiki/Ray_casting">here</a>, but basically a raycast is when a line is drawn in the direction of a cursor (for example, the mouse cursor) until it intecept something. More can be read <a href="https://facebook.github.io/react-vr/docs/input.html#cursor-systems">here</a>.</p>
+<h3>Events</h3>
+<p>In ReactVR, raycasts continue and return when they collide with a view or mesh with at least one of the following:</p>
+<ol>
+<li><code class="inline">onEnter</code>
+</li>
+<li><code class="inline">onExit</code>
+</li>
+<li><code class="inline">onMove</code>
+</li>
+</ol>
+<p>There is also one more event, <code class="inline">onInput</code>, which responds to all interactions: keyboard, mouse, touch, and gamepads. We will see all four events in action.</p>
+<h3><code class="inline">onMove</code> and <code class="inline">onEnter</code></h3>
+<p>Let’s write some code. Inside of <code class="inline">index.vr.js</code>, remove the boilerplate and add the following. An explanation of all the code follows.</p>
+<pre><code class="js lang-js language-js">import React from &#39;react&#39;;
+import {
+  AppRegistry,
+  Text,
+  View,
+  StyleSheet
+} from &#39;react-vr&#39;;
+
+const styles = StyleSheet.create({
+  view: {
+    width: 1,
+    height: 1,
+    backgroundColor: &#39;lime&#39;,
+    transform: [{ translate: [0, 0, -1] }],
+    layoutOrigin: [0.5, 0.5],
+  },
+  entered: {
+    borderColor: &#39;red&#39;,
+    borderWidth: 0.05
+  }
+})
+
+export default class Events extends React.Component {
+  constructor() {
+    super()
+    this.state = { entered: false }
+  }
+  render() {
+    return (
+      &lt;View 
+        onEnter={() =&gt; {
+          this.setState({ entered: true }); console.log(&#39;enter&#39;)
+        }
+        onExit={() =&gt; {
+          this.setState({ entered: false }); console.log(&#39;leave&#39;)
+        }
+        style={[styles.view, this.state.entered ? styles.entered : {}]}
+      &gt;
+      &lt;/View&gt;
+    );
+  }
+};
+
+AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
+<p>First we import some components. Normal React. The <code class="inline">styles</code> object is a bit more interesting. </p>
+<ul>
+<li><p>in ReactVR, measurements are in <strong>meters</strong>. This means an object with a <code class="inline">height</code> and <code class="inline">width</code> of <code class="inline">1</code> will appear as 1 meter tall. </p>
+</li>
+<li><p><code class="inline">transform: [{ translate: [0, 0, -1]} ]</code> moves the <code class="inline">&lt;View&gt;</code> <strong>forward</strong> by 1 meter. In ReactVR, the user is facing -z by default. If we left it at [0, 0, 0], which is the default, the plane would be “on top” of us, and we would not be able to see it. Try changing the <code class="inline">-1</code> to <code class="inline">-0.5</code>, or <code class="inline">-2</code>.</p>
+</li>
+<li><p><code class="inline">layoutOrigin</code> moves the location of the view. <code class="inline">[0, 0]</code> is the top left hand coordinate of the view. By adjusting it by <code class="inline">0.5</code> on both the <code class="inline">x</code> and <code class="inline">y</code> axis, we center the view. Remember, the view is 1m height and 1m wide. Moving it 0.5m in both directions centers it.</p>
+</li>
+</ul>
+<p><strong>Note on transform</strong>: the <code class="inline">transform</code> property is interesting. You can pass <code class="inline">scale</code> and <code class="inline">rotation</code>, and the order <em>is</em> important. <a href="https://facebook.github.io/react-vr/docs/3dcoordinates-and-transforms.html">More here</a>.</p>
+<p>In <code class="inline">render</code>, we simply render the view with the stylesheet. We also set up listeners for the first two events we will look at, <code class="inline">onEnter</code> and <code class="inline">onExit</code>, which a <code class="inline">console.log</code> to verify they are working before moving forward.</p>
+<p>If you typed everything correctly, refreshing <code class="inline">localhost:8081/vr</code> should show:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/view_1.png" alt=""/></p>
+<p>And the console when you move your cursor in and out of the view:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-enter.gif" alt=""/></p>
+<p>Moving your cursor in and our of the view should print <code class="inline">enter</code> and <code class="inline">leave</code> messages in your console. The border should also become red.</p>
+<h3><code class="inline">onMove</code></h3>
+<p>Okay, so we see how <code class="inline">onEnter</code> and <code class="inline">onExit</code> work. <code class="inline">onMove</code> isn’t much different, but let’s see two quick examples of how it works, and what event properties are made available by ReactVR.</p>
+<p>First, update the component as follows:</p>
+<pre><code class="js lang-js language-js">// ... imports and stylesheet
+
+export default class Events extends React.Component {
+  constructor() {
+    super()
+
+    this.state = { count: 0 }
+  }
+
+  render() {
+    return (
+      &lt;View 
+        onMove={() =&gt; this.setState({ count: this.state.count + 1 })}
+        style={styles.view}
+      &gt;
+        &lt;Text&gt;
+          {this.state.count}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    );
+  }
+};
+
+AppRegistry.registerComponent(&#39;Events&#39;, () =&gt; Events);</code></pre>
+<p>We remove the two previous events, and replaced them with <code class="inline">onMove</code>. Try refreshing and mousing over - you should see the <code class="inline">count</code> increasing on the screen - every frame you move your cursor inside the view.</p>
+<h3>Event Properties</h3>
+<p>ReactVR provides a number of useful properties for us to observe, including the <code class="inline">type</code> of event (<code class="inline">mouse</code>, <code class="inline">keyboard</code>, <code class="inline">gamepad</code>, etc).</p>
+<p>To see this information, refactor the above snippet as such:</p>
+<pre><code class="js lang-js language-js">export default class Events extends React.Component { 
+  constructor() {
+    /* no change */
+  }
+
+  handle(e) {
+    const evt = e
+    this.setState({ count: this.state.count + 1 })
+    console.log(`Event: `, evt)
+  }
+
+  render() {
+    return (
+      &lt;View 
+        onInput={e =&gt; this.handle(e)}
+        style={styles.view}
+      &gt;
+        &lt;Text&gt;
+          {this.state.count}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    );
+  }
+}</code></pre>
+<p>Refresh the page, and try moving your mouse around. You will notice the <code class="inline">count</code> increasing a lot faster, and a ton of action in the console. <code class="inline">onInput</code> is called on every frame of input - each time you move the mouse in the view, the counter increments. </p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-on-input.gif" alt=""/></p>
+<h3></h3>
+<p>You will also notice instead of the usual JavaScript <code class="inline">event</code>, with properties like <code class="inline">srcTarget</code>, <code class="inline">path</code>, and so on, the console displays <code class="inline">[object Object]</code>.</p>
+<p>The reason is <code class="inline">event</code> is not a native JavaScript event, but a <code class="inline">SyntheticEvent</code>, part of <a href="https://reactjs.org/docs/events.html#other-events">React’s Event System</a>. Some information can be found in <a href="https://github.com/facebook/react-vr/issues/112">this issue</a>, and <a href="https://stackoverflow.com/questions/49372186/reactvr-global-key-press-event-listener/49857848#49857848">this StackOverflow answer</a>. We can access more information by doing <code class="inline">evt.nativeEvent.inputEvent</code>. Let’s try it out. Update <code class="inline">handle</code>:</p>
+<pre><code class="js lang-js language-js">handle(e) {
+  const evt = e.nativeEvent.inputEvent
+  this.setState({ count: this.state.count + 1 })
+  console.log(`Event: `, evt)
+}</code></pre>
+<p>The console now shows:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/react-events-details.png" alt=""/></p>
+<p>Much more granular. The console is a bit overwhelming now, since <code class="inline">handle</code> is triggering every frame we move the mouse. In the above screenshot, you can see a <code class="inline">type</code> property with the value of <code class="inline">MouseInputEvent</code>. Another type of event available is <code class="inline">KeyboardInputEvent</code>. Update <code class="inline">handle</code> to only trigger on <code class="inline">KeyboardInputEvent</code> and show some of the properties:</p>
+<pre><code class="js lang-js language-js">handle(e) {
+  const evt = e.nativeEvent.inputEvent
+  if (evt.type === &#39;KeyboardInputEvent&#39;) {
+    this.setState({ count: this.state.count + 1 })
+    console.log(`Key pressed. \nkeyCode: ${evt.keyCode}.\nkey: ${evt.key}\neventType: ${evt.eventType}`)
+
+  }
+}</code></pre>
+<p>Refresh the page, ensure the view is focused by clicking it, and press any key. The <code class="inline">count</code> instantly hits 3, and the console shows:</p>
+<pre><code class=" lang- language-">Key pressed. 
+keyCode: 68.
+key: d
+eventType: keydown
+
+Key pressed. 
+keyCode: 0.
+key: d
+eventType: keypress
+
+Key pressed. 
+keyCode: 68.
+key: d
+eventType: keyup
+Key pressed. </code></pre>
+<p>So actually <strong>three</strong> events are occurring, the initial press (keydown), the input itself (keypress) and when the key is released (keyup). All of these are useful. If you continue to hold the key, keydown and keypress will continually trigger.</p>
+<h3>Conclusion</h3>
+<p>ReactVR makes it easy to detect and respond to events. You can also build your own events using raycasts, as long as you implement the <a href="https://facebook.github.io/react-vr/docs/input.html#cursor-systems">required methods</a>. I am looking forward to learning more ReactVR. The source code is <a href="https://github.com/lmiller1990/react-vr-events-examples">here</a>.</p>
+
+  </div>
+</body>
+</html>

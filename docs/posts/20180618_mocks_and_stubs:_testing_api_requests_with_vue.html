@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180618 Mocks and Stubs: Testing API Requests with Vue
+  </h1>
+
+  <div class="post_body">
+    <p>Almost all single page applications will make many calls to external services, so testing those parts of your applications is important. </p>
+<p>I will discuss how to test API calls, specifically:</p>
+<ul>
+<li>Unit testing Vuex actions that use axios
+</li>
+<li>End to end (e2e) testing using Cypress
+</li>
+</ul>
+<p>The source code for this project is available <a href="https://github.com/lmiller1990/testing-api-requests-vue">here</a>.</p>
+<p>We will start at the bottom of the <a href="https://martinfowler.com/bliki/TestPyramid.html">test pyramid</a> with some unit tests, and finish up with some e2e tests.</p>
+<h3>Setup</h3>
+<p>Install the <code class="inline">vue-cli</code> with <code class="inline">npm install -g @vue/cli</code>, and then run <code class="inline">vue create api-tests</code>. Select “Manually select features” and choose the following:</p>
+<ul>
+<li>Babel
+</li>
+<li>Vuex
+</li>
+<li>Unit Testing
+</li>
+<li>E2E Testing 
+</li>
+</ul>
+<p>For unit testing, we want <code class="inline">jest</code>, and for e2e select <code class="inline">cypress</code>. After the installation finishes, <code class="inline">cd api-tests</code> and install Axios with <code class="inline">npm install axios</code>.</p>
+<h3>Unit Testing Axios with Jest</h3>
+<p>We will be using <code class="inline">jsonplaceholder</code>, a service which simulates a REST api. The endpoint is <code class="inline">https://jsonplaceholder.typicode.com/posts/1</code> and the response looks like this:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;userId&quot;: 1,
+  &quot;id&quot;: 1,
+  &quot;title&quot;: &quot;sunt aut facere repellat provident occaecati excepturi optio reprehenderit&quot;,
+  &quot;body&quot;: &quot;quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto&quot;
+}</code></pre>
+<p>We will be doing TDD: write the test, watch it fails, and then make it pass. </p>
+<p>We will see how to mock <code class="inline">axios</code> in two situations:</p>
+<ol>
+<li>A Vuex action, which makes an API call and commits the result
+</li>
+<li>An e2e test, which displays the result in a UI
+</li>
+</ol>
+<p>Let’s start with the action test. Create the test file by running <code class="inline">touch tests/unit/actions.spec.js</code>. Before writing any code, run the test and watch it fail with <code class="inline">npm run test:unit</code>:</p>
+<p>You should get:</p>
+<pre><code class=" lang- language-">FAIL  tests/unit/actions.spec.js
+● Test suite failed to run
+
+  Your test suite must contain at least one test.</code></pre>
+<p>Let’s add a test. In <code class="inline">actions.spec.js</code> add the following:</p>
+<pre><code class="js lang-js language-js">import { actions } from &#39;../../src/store&#39;
+
+jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    get: () =&gt; ({ data: { userId: 1 }})
+  }
+})
+
+
+describe(&#39;getPost&#39;, () =&gt; {
+  it(&#39;makes a request and commits the response&#39;, async () =&gt; {
+    const store = { commit: jest.fn() }
+
+    await actions.getPost(store)
+
+    expect(store.commit).toHaveBeenCalledWith(&#39;SET_POST&#39;, { userId: 1 })
+  }) 
+})</code></pre>
+<p>Running this with <code class="inline">npm run test:unit</code> yields:</p>
+<pre><code class=" lang- language-">FAIL  tests/unit/actions.spec.js
+  ● getPost › makes a request and commits the response
+
+  ReferenceError: actions is not defined</code></pre>
+<p>As expected, the tests fails. We haven’t even created <code class="inline">getPost</code> yet, so let’s do so in <code class="inline">src/store.js</code>. We will also export it seperately to the <code class="inline">default export new Vuex.Store</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import Vuex from &#39;vuex&#39;
+import axios from &#39;axios&#39;
+
+Vue.use(Vuex)
+
+export const actions = {
+  async getPost(store) {
+    const response = await axios.get(&#39;https://jsonplaceholder.typicode.com/posts/1&#39;) 
+
+    store.commit(&#39;SET_POST&#39;, { userId: response.data.userId })
+  }
+}
+
+export default new Vuex.Store({
+  state: {
+
+  },
+  mutations: {
+
+  },
+  actions: actions
+})</code></pre>
+<p>Now we can <code class="inline">import { actions }</code> in the spec:</p>
+<pre><code class="js lang-js language-js">import { actions } from &#39;../../src/store&#39;
+
+jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    get: () =&gt; ({ data: { userId: 1 }})
+  }
+})
+
+
+describe(&#39;getPost&#39;, () =&gt; {
+  it(&#39;makes a request and commits the response&#39;, async () =&gt; {
+    const store = { commit: jest.fn() }
+
+    await actions.getPost(store)
+
+    expect(store.commit).toHaveBeenCalledWith(&#39;SET_POST&#39;, { userId: 1 })
+  }) 
+})</code></pre>
+<p>This gives us a new error:</p>
+<pre><code class=" lang- language-">FAIL  tests/unit/actions.spec.js
+  ● getPost › makes a request and commits the response
+
+  ReferenceError: store is not defined
+
+     5 |     actions.getPost()
+     6 |
+  &gt;  7 |     expect(store.commit).toHaveBeenCalledWith(&#39;SET_POST&#39;, { userId: 1 })</code></pre>
+<p><code class="inline">store</code> is not defined. The goal of this test is simply to make the API call, and commit whatever response comes back, so we will we mock <code class="inline">store.commit</code>, and use Jest’s <code class="inline">.toHaveBeenCalledWith</code> matcher to make sure the response was committed with the correct <code class="inline">mutation</code> handler. We pass <code class="inline">store</code> as the first argument to <code class="inline">getPost</code>, to simulate how <code class="inline">Vuex</code> passes a reference to the <code class="inline">store</code> as the first argument to all actions. Update the test:</p>
+<pre><code class="js lang-js language-js">import { actions } from &#39;../../src/store&#39;
+
+jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    get: () =&gt; ({ data: { userId: 1 }})
+  }
+})
+
+
+describe(&#39;getPost&#39;, () =&gt; {
+  it(&#39;makes a request and commits the response&#39;, async () =&gt; {
+    const store = { commit: jest.fn() }
+
+    await actions.getPost(store)
+
+    expect(store.commit).toHaveBeenCalledWith(&#39;SET_POST&#39;, { userId: 1 })
+  }) 
+})</code></pre>
+<p><code class="inline">jest.fn</code> is just a mock function - it doesn’t actually do anything, but records useful data like how many times it was called, and with what arguments. The test now fails with different error:</p>
+<pre><code class=" lang- language-">FAIL  tests/unit/actions.spec.js
+  ● getPost › makes a request and commits the response
+
+  expect(jest.fn()).toHaveBeenCalledWith(expected)
+
+  Expected mock function to have been called with:
+    [&quot;SET_POST&quot;, {&quot;userId&quot;: 1}]
+  But it was not called.</code></pre>
+<p>This is what we want. The test is failing for the right reason - a <code class="inline">SET_POST</code> mutation should have been committed, but was not. Update <code class="inline">store.js</code> to actually make the API call:</p>
+<pre><code class="js lang-js language-js">import Vue from &#39;vue&#39;
+import Vuex from &#39;vuex&#39;
+import axios from &#39;axios&#39;
+
+Vue.use(Vuex)
+
+export const actions = {
+  async getPost(store) {
+    const response = await axios.get(&#39;https://jsonplaceholder.typicode.com/posts/1&#39;) 
+
+    store.commit(&#39;SET_POST&#39;, { userId: response.data.userId })
+  }
+}
+
+export default new Vuex.Store({
+  state: {
+
+  },
+  mutations: {
+
+  },
+  actions: actions
+})</code></pre>
+<p>Note we added <code class="inline">async</code> to the function, we we can use <code class="inline">await</code> on the axios API call. The test still fails with same error - we also need to prepend the action call in the test with <code class="inline">await</code>:</p>
+<pre><code class="js lang-js language-js">import { actions } from &#39;../../src/store&#39;
+
+jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    get: () =&gt; ({ data: { userId: 1 }})
+  }
+})
+
+
+describe(&#39;getPost&#39;, () =&gt; {
+  it(&#39;makes a request and commits the response&#39;, async () =&gt; {
+    const store = { commit: jest.fn() }
+
+    await actions.getPost(store)
+
+    expect(store.commit).toHaveBeenCalledWith(&#39;SET_POST&#39;, { userId: 1 })
+  }) 
+})</code></pre>
+<p>Now we have two passing tests, including the default <code class="inline">HelloWorld</code> spec included in the project:</p>
+<pre><code class=" lang- language-">PASS  tests/unit/actions.spec.js
+PASS  tests/unit/HelloWorld.spec.js
+
+Test Suites: 2 passed, 2 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        1.333s, estimated 2s
+Ran all test suites.</code></pre>
+<p>This is not ideal, though - we are hitting a real network, which makes the unit test slow and prone to failure. Luckily, Jest let’s us mock dependencies, like <code class="inline">axios</code>, in a number of ways. Let’s see how to do so with <code class="inline">jest.mock</code>.</p>
+<h3>Mocking Axios in the Action spec</h3>
+<p>Jest provides no less that <strong>four</strong> different ways to mock classes and modules, In large projects, I use <a href="https://facebook.github.io/jest/docs/en/manual-mocks.html#mocking-user-modules">manual mocks</a> by creating a <code class="inline">__mocks__</code> folder on the same level as <code class="inline">node_modules</code> and exporting a mock axios module, however for the simple example I will use an <a href="https://facebook.github.io/jest/docs/en/es6-class-mocks.html#calling-jestmock-jest-docs-en-jest-objecthtml-jestmockmodulename-factory-options-with-the-module-factory-parameter">ES6 class mock</a>. I think both are fine, and have been tending towards this style as of late. </p>
+<p>To mock <code class="inline">axios</code> using an ES6 class mock, all you need to do is call <code class="inline">jest.mock(&#39;axios&#39;)</code> and return a function with the desired implentation (since ES6 classes are really just functions under the hood). In this case, we want a <code class="inline">get</code> function that returns a <code class="inline">userId: 1</code> object. Update <code class="inline">actions.spec.js</code>:</p>
+<pre><code class="js lang-js language-js">// ...
+
+jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    get: () =&gt; ({ data: { userId: 1 }})
+  }
+})
+
+// ...</code></pre>
+<p>Easy. The test still passes, but now we are using a mock axios instead of a real network call. We should watch the test fail again, though, just to be should, so update the mock to return <code class="inline">{ userId: 2 }</code> instead:</p>
+<pre><code class=" lang- language-"> FAIL  tests/unit/actions.spec.js
+  ● getPost › makes a request and commits the response
+
+expect(jest.fn()).toHaveBeenCalledWith(expected)
+
+Expected mock function to have been called with:
+  {&quot;userId&quot;: 1}
+as argument 2, but it was called with
+  {&quot;userId&quot;: 2}.</code></pre>
+<p>Looks good - the test is failing for the right reason. Revert the test, and let’s move on to writing an e2e test.</p>
+<h3>Stubbing Axios in a component lifecycle</h3>
+<p>Now we know how to test an action uses <code class="inline">axios</code> - how about in a component? In preparation for writing an e2e using Cypress, let’s see an example of a component that makes an API call in its <code class="inline">created</code> hook.</p>
+<p>Open <code class="inline">src/components/HelloWorld.vue</code>, and delete all the existing markup - you should be left with this:</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div class=&quot;hello&quot;&gt;&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  name: &#39;HelloWorld&#39;
+}
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+&lt;/style&gt;</code></pre>
+<p>We want to <code class="inline">import axios</code>, and make an API request. The code will be similar to the code in <code class="inline">getPost</code>. Lastly, we will render the <code class="inline">title</code> of the post.</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div class=&quot;hello&quot;&gt;
+    Title: {{ post.title }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import axios from &#39;axios&#39;
+export default {
+  name: &#39;HelloWorld&#39;,
+
+  data() {
+    return {
+      post: {}
+    }
+  },
+
+  async created() {
+    const response = await axios.get(&#39;https://jsonplaceholder.typicode.com/posts/1&#39;) 
+    this.post = response.data
+  }
+}
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+&lt;/style&gt;</code></pre>
+<p>Run the application with <code class="inline">npm run serve</code>. Visiting <code class="inline">localhost:8080</code> should show the post title on the screen:</p>
+<pre><code class=" lang- language-">Title: sunt aut facere repellat provident occaecati excepturi optio reprehenderit</code></pre>
+<p>Let’s update the default test <code class="inline">vue-cli</code> gave us in <code class="inline">tests/e2e/specs/test.js</code>:</p>
+<pre><code class="js lang-js language-js">// https://docs.cypress.io/api/introduction/api.html
+
+describe(&#39;My First Test&#39;, () =&gt; {
+  it(&#39;Visits the app root url&#39;, () =&gt; {
+    cy.server()
+    cy.route(&#39;https://jsonplaceholder.typicode.com/posts/1&#39;, {
+      title: &#39;This is a stubbed title&#39;
+    })
+
+    cy.visit(&#39;/&#39;)
+    cy.contains(&#39;div&#39;, &#39;This is a stubbed title&#39;)
+  })
+})</code></pre>
+<p>Run the test with <code class="inline">npm run e2e</code>. Cypress has a great interface and is really easy to use. You should see:</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/cypress-ui.png?raw=true" alt=""/></p>
+<p>Click ‘run’. A Chrome browser should open and if everything went well, you should see:</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-passing.png?raw=true" alt=""/></p>
+<p>It works! However, this test suffers from the original problem we had in the unit test we wrote - it is using a real network call. We want to <strong>stub</strong> the network call, with a fake one, so we can consistently reproduce the same results without relying on a potentially flakey external API. To stub a response in Cypress, you need to do <a href="https://docs.cypress.io/guides/guides/network-requests.html#Stubbing">two things</a>:</p>
+<ol>
+<li>Start a <code class="inline">cy.server</code>
+</li>
+<li>Provide a <code class="inline">cy.route</code>
+</li>
+</ol>
+<p><code class="inline">cy.route</code> takes <a href="https://docs.cypress.io/api/commands/route.html#Arguments">several forms</a>. The one we will use is </p>
+<blockquote><p>cy.route(url, response)</p>
+</blockquote>
+<p>Update the test to use a stubbed response:</p>
+<pre><code class="js lang-js language-js">// https://docs.cypress.io/api/introduction/api.html
+
+describe(&#39;My First Test&#39;, () =&gt; {
+  it(&#39;Visits the app root url&#39;, () =&gt; {
+    cy.server()
+    cy.route(&#39;https://jsonplaceholder.typicode.com/posts/1&#39;, {
+      title: &#39;This is a stubbed title&#39;
+    })
+
+    cy.visit(&#39;/&#39;)
+    cy.contains(&#39;div&#39;, &#39;This is a stubbed title&#39;)
+  })
+})</code></pre>
+<p>If you still have the Cypress server running, saving should automatically rerun the specs. Now we have a failure:</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-updated.png?raw=true" alt=""/></p>
+<p>We can see on the right hand side that the stubbed response was rendered! Simply update the spec to assert the stubbed title is rendered and everything should be green again:</p>
+<p><img src="https://github.com/lmiller1990/testing-api-requests-vue/blob/master/images/e2e-final.png?raw=true" alt=""/></p>
+<h3>Conclusion and Improvements</h3>
+<p>We saw how to mock <code class="inline">axios</code> in a Vuex action spec, and how to stub the response using Cypress. With the advent of tools like Jest and Cypress, testing is extremely simple and actually makes development a lot more smooth one you are in the habit of writing tests. </p>
+<p>Some improvements can be made, an are left an exercise:</p>
+<ul>
+<li>Write some tests using Cypress against a real server, to test critical paths in your application, such as sign up and login. Not stubbing, but against a real server
+</li>
+<li>Mock <code class="inline">axios</code> using Jest’s <a href="https://facebook.github.io/jest/docs/en/manual-mocks.html">manual mocks</a>, where you create a <code class="inline">__mocks__</code> folder with a mock implementation of <code class="inline">axios</code> for use in your unit tests
+</li>
+<li>Write a unit tests for <code class="inline">HelloWorld.vue</code> that mocks <code class="inline">axios</code> in the same way as <code class="inline">actions.spec.js</code>
+</li>
+</ul>
+<p>The source code for this project is available <a href="https://github.com/lmiller1990/testing-api-requests-vue">here</a>.</p>
+
+  </div>
+</body>
+</html>

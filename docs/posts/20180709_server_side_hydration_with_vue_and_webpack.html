@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20180709 Server Side Hydration with Vue and Webpack
+  </h1>
+
+  <div class="post_body">
+    <p>This article will continue on from my post, setting up weback for ssr with Vue, where we implemented basic server side rendering. Now we will add hydration. </p>
+<p>If the application relies on an external resource, for example data retreived from an external endpoint, the data needs to be fetched and resolved <strong>before</strong> we call <code class="inline">renderer.renderToString</code>.</p>
+<p>The source code is available <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add-hydration">here</a>.</p>
+<p>For this example, we will fetch a post from <a href="https://jsonplaceholder.typicode.com/posts/1">JSONPlaceholder</a>. The data looks like this:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;id&quot;: 1,
+  &quot;title&quot;: &quot;sunt aut facere repellat provident occaecati excepturi optio reprehenderit&quot;
+}</code></pre>
+<p>The strategy will go like this:</p>
+<p>Client Side Rendering:</p>
+<ul>
+<li>in the App’s <code class="inline">mounted</code> lifecycle hook, <code class="inline">dispatch</code> a Vuex <code class="inline">action</code>
+</li>
+<li><code class="inline">commit</code> the response
+</li>
+<li>render as usual
+</li>
+</ul>
+<p>Server Side Rendering:</p>
+<ul>
+<li>check for a static <code class="inline">asyncData</code> function we will make
+</li>
+<li>pass the store to <code class="inline">asyncData</code>, and call <code class="inline">dispatch(action)</code>
+</li>
+<li>commit the result
+</li>
+<li>now we have the required data, call <code class="inline">renderer.renderToString</code>
+</li>
+</ul>
+<h3>Setup</h3>
+<p>We need some new modules. Namely:</p>
+<ul>
+<li><code class="inline">axios</code> - a HTTP Client that works in a browser and node environment
+</li>
+<li><code class="inline">vuex</code> - to store the data
+</li>
+</ul>
+<p>Install them with:</p>
+<pre><code class=" lang- language-">npm install axios vuex --save</code></pre>
+<h3>Create the store</h3>
+<p>Let’s make a store, and get it working on the dev server first. Create a store by running <code class="inline">touch src/store.js</code>. Inside it, add the following:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import Vuex from &quot;vuex&quot;
+import axios from &quot;axios&quot;
+
+Vue.use(Vuex)
+
+export function createStore() {
+  return new Vuex.Store({
+    state: {
+      post: {}
+    },
+
+    mutations: {
+      SET_POST(state, { post }) {
+        state.post = {...state.post, ...post}
+      }
+    },
+
+    actions: {
+      fetchPost({ commit }) {
+        return axios.get(&quot;https://jsonplaceholder.typicode.com/posts/1&quot;)
+          .then(response =&gt; commit(&quot;SET_POST&quot;, { post: response.data }))
+      }
+    }
+  })
+}</code></pre>
+<p>Standard Vuex, nothing special, so I won’t go into any detail.</p>
+<p>We need to use the store now. Update <code class="inline">create-app</code>:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import App from &quot;./Hello.vue&quot;
+import { createStore } from &quot;./store&quot;
+
+export function createApp() {
+  const store = createStore()
+
+  const app = new Vue({
+    el: &quot;#app&quot;,
+    store,
+    render: h =&gt; h(App)
+  })
+
+  return { app, store, App }
+}</code></pre>
+<p>We are now returning <code class="inline">{ app, store, App }</code>. This is because we will need access to both <code class="inline">App</code> and <code class="inline">store</code> in <code class="inline">src/server.js</code> later on.</p>
+<p>If you run <code class="inline">npm run dev</code>, and visit <code class="inline">localhost:8080</code>, everything should still be working. Update <code class="inline">src/Hello.vue</code>, to dispatch the action in <code class="inline">mounted</code>, and retreive it using a <code class="inline">computed</code> property:</p>
+<pre><code class="js lang-js language-js">import Vue from &quot;vue&quot;
+import App from &quot;./Hello.vue&quot;
+import { createStore } from &quot;./store&quot;
+
+export function createApp() {
+  const store = createStore()
+
+  const app = new Vue({
+    el: &quot;#app&quot;,
+    store,
+    render: h =&gt; h(App)
+  })
+
+  return { app, store, App }
+}</code></pre>
+<p><code class="inline">localhost:8080</code> should now display the <code class="inline">title</code> as well as <code class="inline">Hello</code>.</p>
+<h3>Fetching the resources on the server</h3>
+<p>Run <code class="inline">npm run build &amp;&amp; node src/server.js</code>, then visit <code class="inline">localhost:8000</code>. You will notice <code class="inline">Hello</code> is rendered, but the <code class="inline">post.title</code> is not. This is because <code class="inline">mounted</code> only runs in a browser. There are no dynamic updated when using SSR, only <code class="inline">created</code> and <code class="inline">beforeCreate</code> execute. See <a href="https://ssr.vuejs.org/guide/universal.html#component-lifecycle-hooks">here</a> for more information. We need another way to dispatch the action.</p>
+<p>In <code class="inline">Hello.vue</code>, add a <code class="inline">asyncData</code> function. This is not part of Vue, just a regular JavaScript function.</p>
+<pre><code class="vue lang-vue language-vue">// ...
+
+export default {
+
+// ...
+
+  asyncData(store) {
+    return store.dispatch(&quot;fetchPost&quot;)
+  },
+
+  // ...
+
+}
+
+// ...</code></pre>
+<p>We have to pass <code class="inline">store</code> as an argument. This is because <code class="inline">asyncData</code> is not part of Vue, so it doesn’t have access to <code class="inline">this</code>, so we cannot access the store - in fact, because we will call this function before calling <code class="inline">renderer.renderToString</code>, <code class="inline">this</code> doesn’t even exist yet.</p>
+<p>Now update <code class="inline">src/server.js</code> to call <code class="inline">asyncData</code>:</p>
+<pre><code class="js lang-js language-js">// ...
+
+server.get(&quot;*&quot;, (req, res) =&gt; {
+  const { app, store, App } = createApp()
+
+  App.asyncData(store).then(() =&gt; {
+    renderer.renderToString(app).then(html =&gt; {
+      res.end(html)
+    })
+  })
+})
+
+// ...</code></pre>
+<p>Now we when render <code class="inline">app</code>, <code class="inline">store.state</code> should already contain <code class="inline">post</code>! Let’s try it out:</p>
+<pre><code class=" lang- language-">npm run build &amp;&amp; node src/server.js</code></pre>
+<p>Visting <code class="inline">localhost:8000</code> causes a error to be shown in the terminal:</p>
+<pre><code class=" lang- language-">(node:9708) UnhandledPromiseRejectionWarning: ReferenceError: XMLHttpRequest is not defined
+    at /Users/lachlanmiller/javascript/vue/webpack-simple/dist/main.js:7:63038
+    at new Promise (&lt;anonymous&gt;)
+    at t.exports (/Users/lachlanmiller/javascript/vue/webpack-simple/dist/main.js:7:62939)
+    at t.exports (/Users/lachlanmiller/javascript/vue/webpack-simple/dist/main.js:12:10624)
+    at &lt;anonymous&gt;
+    at process._tickCallback (internal/process/next_tick.js:188:7)</code></pre>
+<p><code class="inline">XMLHttpRequest</code> is Web API, and does not exist in a Node environment. But why is this happening? <code class="inline">axios</code> is meant to work on both the client and server, right?</p>
+<p>Let’s take a look at <code class="inline">axios</code>:</p>
+<pre><code class=" lang- language-">cat node_modules/axios/package.json</code></pre>
+<p>There is a bunch of stuff. The fields are interested in are <code class="inline">browser</code> and <code class="inline">main</code>:</p>
+<pre><code class=" lang- language-">&quot;main&quot;: &quot;index.js&quot;
+
+...
+
+&quot;browser&quot;: {
+  &quot;./lib/adapters/http.js&quot;: &quot;./lib/adapters/xhr.js&quot;
+}</code></pre>
+<p><code class="inline">browser</code> is the source of the problem. See more about <a href="https://docs.npmjs.com/files/package.json#browser">browser</a> on npm. Basically, if there is a <code class="inline">browser</code> field, and the <code class="inline">target</code> of the webpack build is <code class="inline">web</code>, it will use the <code class="inline">browser</code> field instead of <code class="inline">main</code>. Let’s review our <code class="inline">config/server.js</code>:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+
+module.exports = {
+  entry: &quot;./src/create-app.js&quot;,
+
+  output: {
+    libraryTarget: &quot;commonjs2&quot;
+  }
+}</code></pre>
+<p>We did not specify <code class="inline">target</code>. If we check the documentation <a href="https://webpack.js.org/concepts/targets/#multiple-targets">here</a>, we can see that the default value for <code class="inline">target</code> is web. This means we are using the <code class="inline">axios</code> build intended for the client instead of the Node.js build. Update <code class="inline">config.server.js</code>:</p>
+<pre><code class="js lang-js language-js">const path = require(&quot;path&quot;)
+
+module.exports = {
+  entry: &quot;./src/create-app.js&quot;,
+
+  target: &quot;node&quot;,
+
+  output: {
+    libraryTarget: &quot;commonjs2&quot;
+  }
+}</code></pre>
+<p>Now run </p>
+<pre><code class=" lang- language-">npm run build &amp;&amp; node src/server.js</code></pre>
+<p> and visit <code class="inline">localhost:8000</code>. The <code class="inline">title</code> is rendered! Compare it to <code class="inline">localhost:8080</code> using the dev server - you can see that when we do the client side fetching, the title is blank briefly, until the request finished. Visiting <code class="inline">localhost:8000</code> doesn’t have this problem, since the data is fetched before the app is even rendered.</p>
+<h3>Conclusion</h3>
+<p>We saw how to write code that runs both on the server and client. This configuration is by no means robust and is not meant for use in a serious app, but illustrates how to set up different webpack configs for the client and server. </p>
+<p>In this post we learned:</p>
+<ul>
+<li>about <code class="inline">package.json</code>, specifically the <code class="inline">browser</code> property
+</li>
+<li>webpack’s <code class="inline">target</code> property
+</li>
+<li>how to execute an ajax request on both the client and server
+</li>
+</ul>
+<h3>Improvements</h3>
+<p>Many improvements remain:</p>
+<ul>
+<li>use Vue Router (both server and client side)
+</li>
+<li>more robust data fetching
+</li>
+<li>add some unit tests
+</li>
+</ul>
+<p>The source code is available <a href="https://github.com/lmiller1990/webpack-simple-vue/tree/add-hydration">here</a>.</p>
+
+  </div>
+</body>
+</html>

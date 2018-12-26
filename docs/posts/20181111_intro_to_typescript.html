@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20181111 Intro to TypeScript
+  </h1>
+
+  <div class="post_body">
+    <p>I have been learning about TypeScript lately, since I will be using it at my new job, and I think type-safety can be valuable. This posts discusses some of the basic features of TypeScript.</p>
+<p>This article was published on 11/11/2018.</p>
+<h2>Interfaces</h2>
+<p>One of the best features of TypeScript is checking the <em>shape</em> of a value.</p>
+<h2>The First Interface</h2>
+<pre><code class="ts lang-ts language-ts">// good
+function printLabel(labelObj: { label: string }) {
+  console.log(labelOb)
+}
+
+// better
+interface LabelValue {
+  label: string
+}
+
+function printLabel(labelObj: LabelValue) {
+  // ...
+}
+
+// or
+function printLabel({ label }: LabelValue) {
+  // ...
+}</code></pre>
+<p>You can have an optional value with <code class="inline">?</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface Optional {
+  val: string
+  optionalNum?: number
+}</code></pre>
+<h2>Readonly</h2>
+<p><code class="inline">readonly</code> denotes a property that can only be assigned to on creation. </p>
+<pre><code class="ts lang-ts language-ts">interface Point {
+  readonly x: number
+}
+
+let p1: Point = { x: 10 } // ok
+let p2: Point = { x: 10 }
+p2.x = 20 // bad</code></pre>
+<p>There is also a <code class="inline">ReadonlyArray</code> type in TypeScript:</p>
+<pre><code class="ts lang-ts language-ts">let readOnlyArr: ReadonlyArray&lt;number&gt; = [1, 2, 3]
+readOnlyArr.push(3) // bad</code></pre>
+<p>You can define the types of keys in an interface. Here is a full example. Interfaces can be nice to get type safety in Vuex stores:</p>
+<pre><code class="ts lang-ts language-ts">interface ShapeConfig {
+  id: number
+  width: number
+  height: number
+}
+
+interface ShapeConfigState {
+  ids: number[]
+  all: {
+    [id: number]: ShapeConfig
+  }
+}
+
+const square: ShapeConfig = {
+  width: 100,
+  height: 100,
+  id: 1
+}
+
+ const rect: ShapeConfig = {
+   id: 2,
+   width: 100,
+   height: 50
+ }
+
+const state: ShapeConfigState = {
+  ids: [1, 2],
+  all: {
+    1: square,
+    2: rect
+  }
+}</code></pre>
+<h2>Function Interfaces</h2>
+<p>You can use interfaces to describe functions, as well! Let’s see how.</p>
+<pre><code class="ts lang-ts language-ts">interface SearchFunc {
+  (source: string, subString: string) : boolean
+}
+
+let mySearch: SearchFunc
+
+mySearch = function(source: string, sub: string) {
+  let result = source.search(sub)
+
+  return result &gt; -1
+}</code></pre>
+<p>If <code class="inline">mySearch</code> had not returned a boolean, or declared <code class="inline">sub: number</code> instead, a compile time error would have been raised.</p>
+<h2>Indexable Types</h2>
+<p>You can also use interfaces to describe indexes, for example:</p>
+<pre><code class="ts lang-ts language-ts">interface StringArray {
+  [index: number] : string
+}
+
+let myArray: StringArray
+myArray = [&quot;a&quot;, &quot;b&quot;] // ok
+myArray = [&quot;a&quot;, 1] // error</code></pre>
+<h2>Class Types</h2>
+<p>You can use interfaces to ensure a class meets some requirements:</p>
+<pre><code class="ts lang-ts language-ts">interface ClockInterface {
+  currentTime: Date
+  setTime(d: Date): void
+}
+
+class Clock implements ClockInterface {
+  currentTime: Date
+
+  setTime(d: Date) {
+    this.currentTime = d
+  }
+
+  constructor(h: number, m: number) {
+    this.currentTime = new Date()
+  }
+}</code></pre>
+<h2>Difference between Static and Instance sides of classes</h2>
+<pre><code class="ts lang-ts language-ts">// for instance methods (instance side)
+interface ClockInterface {
+  tick(): void
+}
+
+// for constructor (static side)
+interface ClockConstructor {
+  new (hour: number, min: number): ClockInterface
+}
+
+function createClock(ctor: ClockConstructor, hour: number, min: number): ClockInterface {
+  return new ctor(hour, min)
+}
+
+class DigitalClock implements ClockInterface {
+  constructor(h: number, m: number) {}
+
+  tick() {
+    console.log(&#39;Tick tock...&#39;)
+  }
+}
+
+createClock(DigitalClock, 12, 17)</code></pre>
+<p>The <code class="inline">ClockInterface</code> is used for ensuring classes that implement it are correct, and <code class="inline">ClockConstructor</code> for ensuring new instances are correct. Pretty neat.</p>
+<h2>Extending Interfaces</h2>
+<p>Interfaces can extend each other.</p>
+<pre><code class="ts lang-ts language-ts">interface Shape {
+  color: string
+}
+
+interface PhysicalObject { 
+  weight: number
+}
+
+interface Triangle extends PhysicalObject, Shape {
+  sideCount: number
+}
+
+let tri1 = &lt;Triangle&gt;{ color: &#39;blue&#39;, sideCount: 3 } // ok... allowed to skip weight
+let tri2: Triangle = { color: &#39;blue&#39;, sideCount: 3 } // not ok! Needs weight.
+let tri3 = { color: &#39;red&#39; } as Triangle // also ok</code></pre>
+<p><code class="inline">tri2</code> is the only way to create an object and have the compiler check all the required properties are assigned.</p>
+<h2>Hybrid Types</h2>
+<p>Sometimes you encounter an object that is both object-like and function-like. Consider:</p>
+<pre><code class="ts lang-ts language-ts">interface Counter {
+  (start: number): string
+  interval: number
+  reset(): void
+}
+
+function getCounter(): Counter {
+  let counter = &lt;Counter&gt;function (start: number) {
+    //  ...
+  }
+
+  counter.interval = 123
+  counter.reset = function() { 
+    // ...
+  }
+
+  return counter
+}
+
+const counter: Counter = getCounter()
+counter(&quot;a&quot;) // error - should be a number
+counter.reset() // ok!
+counter.interval = 10</code></pre>
+<p>Factory functions often take this kind of form. Note the <code class="inline">Counter</code> interface has both a function signature <code class="inline">(start: number): string, an</code>interval<code class="inline">property and a</code>reset<code class="inline">property that is a function.</code></p>
+<h2>Interface Extending Classes</h2>
+<p>When an interface type extends a class:</p>
+<ul>
+<li>it <strong>does</strong> inherit the members
+</li>
+<li>but <strong>not</strong> their implementations
+</li>
+</ul>
+<p>Here is an example:</p>
+<pre><code class="ts lang-ts language-ts">class Control {
+  private state: any
+
+  setState(msg: string): void {
+    this.state = msg
+  }
+
+  showState(): void {
+    console.log(this.state)
+  }
+}
+
+// interface extending class
+// the interface will inherit the members but not their implementation
+// this means that SelectableControl can __only__ be implemented by Control, or a subclass of it.
+interface SelectableControl extends Control {
+  select(): void
+}
+
+class Button extends Control implements SelectableControl {
+  select() { 
+  }
+}
+
+const b: Button = new Button()
+
+b.setState(&quot;Hello&quot;)
+b.showState() // Hello</code></pre>
+<p>If you want to provide a default implementation, you cannot use an interface. Instead, you can use an <code class="inline">abstract</code> class. Abstract classes cannot be directly instantiated.</p>
+<pre><code class="ts lang-ts language-ts">abstract class BaseWidget {
+  // will need to be implemented
+  abstract getName(): string
+
+  update(): void {
+    console.log(&quot;Updating Widget...&quot;)
+  }
+}
+
+class SideWidget extends BaseWidget {
+  // if this is not implemented, the compiler will notify you.
+  getName() {
+    return &quot;Side&quot;
+  } 
+}
+
+const sideWidget: SideWidget = new SideWidget()
+console.log(sideWidget.getName())
+sideWidget.update() // default implementation</code></pre>
+<h2>Generics</h2>
+<p>A generic is a component that can work across a variety of types - even ones yet to be created.</p>
+<p>The most simple example is the “identity function”.</p>
+<h2>Hello World of Generics</h2>
+<p>First, without generics, the function looks like this:</p>
+<pre><code class="ts lang-ts language-ts">function identity(arg: number): number {
+  return arg
+}</code></pre>
+<p>Or we could use <code class="inline">any</code>:</p>
+<pre><code class="ts lang-ts language-ts">function identify(arg: any): any {
+  return arg
+}</code></pre>
+<p>Now it works with any type… but this is not very descriptive or useful. We may as well just use regular JavaScript. What we need is a way of capturing the type of the argument so we can denote what will be returned. We can use a <strong>type varaible</strong>, a variable that works on types rather than values.</p>
+<pre><code class="ts lang-ts language-ts">function identify&lt;T&gt;(arg: T): T {
+  return arg
+}</code></pre>
+<p>This <code class="inline">T</code> allows us to capture the type the user provides (such as <code class="inline">string</code> or <code class="inline">number</code>). We can use this information later. Let’s see how to call the <code class="inline">identify</code> function:</p>
+<pre><code class="ts lang-ts language-ts">let output = identify&lt;string&gt;(&quot;myString&quot;) // type of the output will be string</code></pre>
+<p>You can also omit the <code class="inline">&lt;string&gt;</code> and leave it up to the compiler. Since <code class="inline">&quot;myString&quot;</code> is a string, <code class="inline">&lt;T&gt;</code> is set to <code class="inline">string</code> automatically. Now, let’s see it in actions:</p>
+<pre><code class="ts lang-ts language-ts">let num = identify({}) 
+let str = identify(&quot;a&quot;)
+
+let out = num - str // error! {} - a is not valid</code></pre>
+<p>This won’t even compile:</p>
+<pre><code class=" lang- language-">src/test.ts(29,11): error TS2362: The left-hand side of an arithmetic operation must be of type &#39;any&#39;, &#39;number&#39; or an enum type.
+src/test.ts(29,17): error TS2363: The right-hand side of an arithmetic operation must be of type &#39;any&#39;, &#39;number&#39; or an enum type.</code></pre>
+<p>So it shouldn’t.</p>
+<h2>Working with Generic Type Variables</h2>
+<p>Let’s say we want to log the length of the variable, <code class="inline">T</code>.</p>
+<pre><code class="ts lang-ts language-ts">function loggingIdentify&lt;T&gt;(arg: T): T {
+  console.log(arg.length) // error.... T does not have a length property
+
+  return arg
+}</code></pre>
+<p>Makes sense… what if <code class="inline">T</code> is a <code class="inline">number</code>? <code class="inline">number</code> has no <code class="inline">length</code> property.</p>
+<p>What if we intend to use <code class="inline">loggingIdentify</code> with an array of some kind objects? They would have a <code class="inline">length</code> property. We can write the function like this:</p>
+<pre><code class="ts lang-ts language-ts">function loggingIdentify&lt;T&gt;(arg: T[]) : T[] {
+  // ...
+}
+
+// or
+
+function loggingIdentify&lt;T&gt;(arg: Array&lt;T&gt;) : Array&lt;T&gt; {
+  // ...
+}</code></pre>
+
+  </div>
+</body>
+</html>
