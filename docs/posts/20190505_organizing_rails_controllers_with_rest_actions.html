@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20190505 Organizing Rails Controllers with REST actions
+  </h1>
+
+  <div class="post_body">
+    <p>This post describes my experience organizing Rails controllers using only REST actions, an approach popularized by the mighty DHH and his cronies.</p>
+<p>This article was published on 06/05/2019.</p>
+<h2>Premise</h2>
+<p>As demoed by DHH <a href="https://twitter.com/dhh/status/453188262002429952?lang=en">here</a> and explained in depth <a href="http://jeromedalbert.com/how-dhh-organizes-his-rails-controllers/">here</a>, organzing your Rails controllers with REST only actions, and then nesting sub controllers, you can make your application more consistent and approachable.</p>
+<h2>Example</h2>
+<p>Let’s say I have <code class="inline">posts</code> resource with your usual REST actions. Now I want to allow users to “correct” a post. One alternative is adding a <code class="inline">correction</code> route:</p>
+<pre><code class="rb lang-rb language-rb">class PostsController &lt; ApplicationController
+  def correct
+    # ...
+  end
+end</code></pre>
+<p>And in <code class="inline">routes.rb</code>, you would add the extra route. Something like:</p>
+<pre><code class=" lang- language-">resources :posts do
+  get &#39;correct&#39;, controller: &#39;posts/correct&#39;
+end </code></pre>
+<p>The pattern DHH and friends describe encourages you to make a new controller for any non standard REST method. So we make a new file in <code class="inline">app/controllers/posts/corrections_controller.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">module Posts
+  class CorrectionsController &lt; ApplicationController
+    def index
+    end
+  end
+end</code></pre>
+<p>Now, since it is a “nested” resource, we naturally want access to the parent resource (eg, the <code class="inline">post</code>). The simple way would be to just do <code class="inline">@post = Post.find(params[:post_id])</code>. However, there is a convention that comes along with this nested controllers approach to create a concern to set the post for us. In <code class="inline">app/controllers/concerns/post_scoped.rb</code> add:</p>
+<pre><code class="rb lang-rb language-rb">module PostScoped
+  extend ActiveSupport::Concern
+
+  included do
+    before_action :set_post
+  end
+
+  private
+
+  def set_post
+    @post = Post.find(params[:post_id])
+  end
+end</code></pre>
+<p>And in <code class="inline">posts/corrections_controller.rb</code>:</p>
+<pre><code class="rb lang-rb language-rb">module Posts
+  class CorrectionsController &lt; ApplicationController
+    include PostScoped
+
+    def index
+    end
+  end
+end</code></pre>
+<p>Now all the methods in the <code class="inline">CorrectionsController</code> have access to <code class="inline">@post</code>.</p>
+<p>Lastly, <code class="inline">routes.rb</code> looks like this:</p>
+<pre><code class="rb lang-rb language-rb">Rails.application.routes.draw do
+  resources :posts do
+    scope module: &#39;posts&#39; do
+      resources :corrections
+    end
+  end
+end</code></pre>
+<h2>Conclusion</h2>
+<p>I am excited to try this pattern out. It seems clean and scalable.</p>
+
+  </div>
+</body>
+</html>
