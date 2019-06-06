@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20190606 Introducing the Flux Entities Pattern
+  </h1>
+
+  <div class="post_body">
+    <p>The flux entity pattern aims to simply the design and implementation of flux stores, such as Redux or Vuex. It is based on common patterns I identified and extracted over the last few years of working on various single page apps, mainly in Vue and React, using Vuex and Redux respectively.</p>
+<p>This pattern is applicable to any flux library, and likelyother state management paradigms. I extracted some useful type definitions and utilities functions into a library called <code class="inline">flux-entities</code>, found <a href="https://github.com/lmiller1990/flux-entities">here</a>.
+o</p>
+<p>Specifically, this pattern lays out some common rules for how you should structure the state of your flux store. When coupled with TypeScript, it becomes even easily to implement, however the same ideas apply to regular JavaScript.</p>
+<p>This article will describe a small application (well, at least the flux store for one) and demonstrate why this pattern is useful. Having some basic guidelines for how you structure each slice of the state makes it easier to scale applications, on board new developers, and reason about the codebase in general. Working examples in React, Vue and vanilla JS can be found on the <a href="https://github.com/lmiller1990/flux-entities">library’s GitHub page</a>.</p>
+<h2>The Tutorial</h2>
+<p>To illustrate the concepts and introduce the API for the <code class="inline">flux-entities</code>, we will discuss and design the state of a store of a generic project management tool. You can read the full documentation and source code <a href="https://github.com/lmiller1990/flux-entities">here</a>.</p>
+<p>There will be three “slices” of state in our store in our flux store: <code class="inline">users</code>, <code class="inline">projects</code> and <code class="inline">tasks</code>. For the benefit of explaining the <code class="inline">flux-entities</code> library, users will be loaded synchronously. Projects are also loaded asynchronously, and at any one time a single project can be “selected”. Tasks are loaded asynchronously (when a project is selected, for example).</p>
+<p>When using <code class="inline">flux-entities</code>, all reducers start from the same base shape, extending various interfaces where needed. The bulk of the work from now on will be introducing the types that are used in the flux entity pattern, and why they are used.</p>
+<h2>The <code class="inline">users</code> State</h2>
+<p>As stated above the purpose of this article, we will pretend the data for the users is the following JSON object, hardcoded in the application (thus is will be loaded synchronously). When I discuss the projects and tasks states, we will see how to handle asynchronous loading using the <code class="inline">flux-entities</code> library.</p>
+<p>The users data might look looks like this:</p>
+<pre><code class="json lang-json language-json">[
+  { &quot;id&quot;: 1, name: &quot;Alice&quot; }
+  { &quot;id&quot;: 2, name: &quot;Bob&quot; }
+]</code></pre>
+<p>And the corresponding interface will look like:</p>
+<pre><code class="ts lang-ts language-ts">interface IUser {
+  id: number
+  name: string
+}</code></pre>
+<p>For a state that simply stores some data that is loaded in a non asynchronous fashion, <code class="inline">flux-entities</code> provides the <code class="inline">IBaseState</code> interface, which is defined like this:</p>
+<pre><code class="ts lang-ts language-ts">interface IEntityHashMap&lt;T&gt; {
+    [id: number]: T
+}
+
+interface IBaseState&lt;T&gt; {
+    id: number[]
+    all: IEntityHashMap&lt;T&gt;
+}</code></pre>
+<p>We can extend from <code class="inline">IBaseState</code> and define the <code class="inline">users</code> state:</p>
+<pre><code class="ts lang-ts language-ts">interface IUsersState extends IBaseState&lt;IUser&gt; {}</code></pre>
+<p><code class="inline">flux-entities</code> also includes factory functions to initialize the initial state. Since we are extending from <code class="inline">IBaseState</code>, we can use the <code class="inline">baseState</code> function to initialize the state:</p>
+<pre><code class="ts lang-ts language-ts">const initialUsersState: IUserState = baseState&lt;IUser&gt;() 
+// This creates the following:
+// {
+//   ids: [],
+//   all: {}
+// }</code></pre>
+<p>Accessing a single entity is a more common need than iterating over the entire collection. This is why storing the data in a hashmap, <code class="inline">all</code>, is useful. </p>
+<p>If you store all the entities in an array, for example <code class="inline">state.users</code> where <code class="inline">users</code> is <code class="inline">IUser[]</code>, whenever you want a specific one, you need to iterate over each element, checking some key (usually an id). This has a complexity of O(n) With the hashmap, we simply do <code class="inline">users.all[id]</code> to retrieve a specific user’s details. By storing the actual data in a hash map, looking up a user is a O(1) operation.</p>
+<p>If you do want to iterate over them (for example, if we want to show an entire list of projects) you would simply do:</p>
+<pre><code class="ts lang-ts language-ts">const users = store.getState().users
+
+for (const id of users.ids) {
+    console.log(
+        users.all[id].name // access the user like this
+    )
+}</code></pre>
+<p>In a React/Vue app:</p>
+<pre><code class="jsx lang-jsx language-jsx">&lt;div v-for=&quot;id of $store.state.users.ids&quot;&gt;
+    &lt;div&gt;{{ $store.state.users.all[id].name }}&lt;/div&gt;
+&lt;/div&gt;
+
+{users.ids.map(id =&gt; &lt;div&gt;{users.all[id].name}&lt;div&gt;)}</code></pre>
+<p>Looping over the <code class="inline">ids</code> and access the actual data in the <code class="inline">all</code> hashmap is not that ideal. One such example is when you are using the container/component pattern - you would need to pass both the <code class="inline">ids</code> and <code class="inline">all</code> objects in <code class="inline">mapStateToProps</code>. There is a helper method to simplify this: <code class="inline">mapEntities</code>. It takes a <code class="inline">BaseState</code> and returns the entities as an array:</p>
+<pre><code class="ts lang-ts language-ts">const users = mapEntities(store.getState.users)</code></pre>
+<p><code class="inline">mapEntities</code> signature looks is: <code class="inline">mapEntities&lt;T&gt;(state: IBaseState&lt;T&gt;) =&gt; T[]</code> - it’s generic, so in the example above, <code class="inline">users</code> will be inferred to be <code class="inline">IUser[]</code>.</p>
+<p>Now your <code class="inline">mapStateToProps</code> function would just be:</p>
+<pre><code class="ts lang-ts language-ts">const mapStateToProps = (state: State): Props =&gt; {
+  return {
+    users: mapEntities(state.users)
+  }
+}</code></pre>
+<p>And you component will receive an array of <code class="inline">IUser</code> as <code class="inline">props.users</code>.</p>
+<h2>The <code class="inline">projects</code> state</h2>
+<p>Often, applications will display a list of items, allowing the user to choose one and see more detail. In the application we are designing the store for, we show a list of projects, and a user can choose one. <code class="inline">flux-entities</code> provides the <code class="inline">ISelectableState</code> interface for this purpose.</p>
+<pre><code class="ts lang-ts language-ts">interface ISelectableState&lt;T&gt; extends IBaseState&lt;T&gt; {
+  selectedId: number | null
+}</code></pre>
+<p>If a project is selected, <code class="inline">selectedId</code> is the <code class="inline">id</code> of the project. If not, it is <code class="inline">null</code> - as opposed to <code class="inline">undefined</code>. I prefer <code class="inline">null</code> it’s more explicit. By extending <code class="inline">IBaseState</code>, <code class="inline">ids</code> and <code class="inline">all</code> keys are also included.</p>
+<p>The project state could look like this:</p>
+<pre><code class="ts lang-ts language-ts">interface IProjectsState extends ISelectableState&lt;IProject&gt; {}
+
+const initialProjectsState: IProjectsState = {
+  ids: [],
+  all: {},
+  selectedId: null
+}</code></pre>
+<p>Of course, you are free to add additional keys to the state - <code class="inline">flux-entities</code> just provides a common base.</p>
+<p>A utility function is included get the currently selected project, <code class="inline">selectedEntity</code>:</p>
+<pre><code class="ts lang-ts language-ts">const currentProject = selectedEntity(store.getState().projects) // project is inferred as an IProject</code></pre>
+<p>As with the users example, you can use the <code class="inline">selectableBaseState()</code> function to initialize the state.</p>
+<h2>The <code class="inline">tasks</code> state</h2>
+<p>We don’t want to fetch all the tasks when the app is loaded - that wouldn’t scale in terms of performance. We will fetch them asynchronously, when a project is selected. This introduces the <code class="inline">IAjaxState</code>, another part of <code class="inline">flux-entities</code>. When loading some data from a server, there are three states to consider:</p>
+<ol>
+<li>The initial state. No request has been made, no data has been fetched.
+</li>
+<li>The request has been initiated, but is yet to complete. Show a spinner.
+</li>
+<li>The request has completed - either an error occurred, or the request was successful and we now have the data.
+</li>
+</ol>
+<p>The <code class="inline">IAjaxState</code> definition looks like this:</p>
+<pre><code class="ts lang-ts language-ts">interface IAjaxState&lt;T, ErrorType = string&gt; {
+  loading: boolean
+  touched: boolean
+  errors: ErrorType[]
+}</code></pre>
+<p>For our <code class="inline">tasks</code> state, we want to store entities, as well as handle asynchronous behaviour. We can use <code class="inline">IAjaxBaseState</code> - an interface extending both <code class="inline">IAjaxState</code> and <code class="inline">IBaseState</code>. The shape of the <code class="inline">tasks</code> state will be like this:</p>
+<pre><code class="ts lang-ts language-ts">interface ITasksState extends IAjaxBaseState&lt;ITask&gt; {}
+
+const initialTasksState: ITasksState = {
+  loading: false
+  touched: false, 
+  errors: [],
+  all: {},
+  ids: []
+}</code></pre>
+<p>Again, you can use the <code class="inline">ajaxBaseState</code> helper function if you do not want to declare the initial state of each key.</p>
+<p>Using <code class="inline">touched</code>, <code class="inline">errors</code> and <code class="inline">loading</code> we can figure out the state of the application and update the UI accordingly:</p>
+<ul>
+<li>If <code class="inline">touched</code> is false, we know that slice of the store is in it’s initial state - no request has been made. This is useful for initializing the first API call. We can do something, such as make the first API call to load the data.
+</li>
+<li>If <code class="inline">loading</code> is <code class="inline">true</code>, we know the API call has been initiated. Do something like display a spinner. 
+</li>
+<li><p>When <code class="inline">touched</code> is <code class="inline">true</code> and <code class="inline">loading</code> is false, the API calls has finished. If:</p>
+<ul>
+<li>if <code class="inline">errors</code> if empty, the API call was successful. No need to do anything.
+</li>
+<li>if <code class="inline">errors.length &gt; 0</code>, an error occurred. Update the application accordingly.
+</li>
+</ul>
+</li>
+</ul>
+<p><code class="inline">flux-entities</code> bundles these three helper functions, called <code class="inline">isLoading</code>, <code class="inline">isLoaded</code> and <code class="inline">isErrorState</code>, to help determine out the current state.</p>
+<h3>A Full Example (<code class="inline">tasks</code> state)</h3>
+<p>The reducer for <code class="inline">tasks</code> might look something like this:</p>
+<pre><code class="ts lang-ts language-ts">import { IAjaxBaseState } from &#39;flux-entities&#39;
+
+interface ITasksState extends IAjaxBaseState&lt;ITask&gt; {}
+const initialState: ITasksState = ajaxBaseState&lt;ITask&gt;()
+
+const tasksReducer = (state: ITasksState = initialState, action): ITasksState =&gt; {
+  if (action.type === &#39;tasksFetchRequest&#39;) {
+    return {
+      ...state,
+      loading: true,
+      touched: true,
+      errors: []
+    }
+  }
+
+  if (action.type === &#39;tasksFetchSuccess&#39;) {
+    return (
+      action.payload.reduce&lt;ITasksState&gt;((acc, curr) =&gt; {
+        return {
+          ...state,
+          loading: false,
+          ids: Array.from(new Set([...acc.ids, curr.id])),
+          all: { ...acc.all, [curr.id]: curr }
+        }
+      }, { ...state })
+    )
+  }
+
+  if (action.type === &#39;tasksFetchFailure&#39;) {
+    return {
+      ...state,
+      loading: false,
+      errors: [action.payload]
+    }
+  }
+
+  if (action.type === &#39;tasksClear&#39;) {
+    return ajaxBaseState&lt;ITask&gt;()
+  }
+
+  return state
+}
+
+export { tasksReducer }</code></pre>
+<p>If you are using React, you could then consume this state with the following container/component combination:</p>
+<p>Container: </p>
+<pre><code class="ts lang-ts language-ts">import { AnyAction } from &#39;redux&#39;
+import { connect } from &#39;react-redux&#39;
+import { ThunkDispatch } from &#39;redux-thunk&#39;
+import { mapEntities, isLoading, isLoaded } from &#39;flux-entities&#39;
+
+import { Tasks, IStateProps, IDispatchProps } from &#39;./Tasks&#39;
+import { IState } from &#39;./store&#39;
+import { fetchTasks, clearTasks } from &#39;./actions&#39;
+
+const mapStateToProps = (state: IState): IStateProps =&gt; {
+  console.log(state.users)
+  return {
+    tasks: mapEntities(state.tasks),
+    loading: isLoading(state.tasks),
+    loaded: isLoaded(state.tasks),
+  }
+}
+
+const mapDispatchToProps = (dispatch: ThunkDispatch&lt;{}, {}, AnyAction&gt;): IDispatchProps =&gt; {
+  return {
+    fetchTasks: () =&gt; dispatch(fetchTasks()),
+    clearTasks: () =&gt; dispatch(clearTasks())
+  }
+}
+
+const TasksContainer = connect(mapStateToProps, mapDispatchToProps)(Tasks)
+
+export {
+  TasksContainer
+}</code></pre>
+<p>Component:</p>
+<pre><code class="ts lang-ts language-ts">import React from &#39;react&#39;
+
+import { ITask } from &#39;./types&#39;
+
+export interface IStateProps {
+  users: ITask[]
+  loading: boolean
+  loaded: boolean
+}
+
+export interface IDispatchProps {
+  fetchTasks: () =&gt; Promise&lt;void&gt;
+  clearTasks: () =&gt; void
+}
+
+type TProps = IStateProps &amp; IDispatchProps
+
+class Tasks extends React.PureComponent&lt;TProps&gt; {
+  public render(): JSX.Element {
+    return (
+      &lt;React.Fragment&gt;
+        &lt;button onClick={this.props.fetchTasks}&gt;Fetch Tasks&lt;/button&gt;
+        &lt;button onClick={this.props.clearTasks}&gt;Clear State&lt;/button&gt;
+        &lt;div&gt;
+          &lt;div&gt;Loading: {this.props.loading ? &#39;true&#39; : &#39;false&#39;}&lt;/div&gt;
+          &lt;div&gt;Loaded: {this.props.loaded ? &#39;true&#39;: &#39;false&#39;}&lt;/div&gt;
+          &lt;ul&gt;
+            {
+              this.props.tasks.map(user =&gt; &lt;li key={task.id}&gt;ID: {task.id}. Name: {task.name}&lt;/li&gt;)
+            }
+          &lt;/ul&gt;
+        &lt;/div&gt;
+      &lt;/React.Fragment&gt;
+    )
+  }
+}
+
+export {
+  Tasks
+}</code></pre>
+<h2>Conclusion</h2>
+<p>The flux entities pattern is one way to enforce a common structure across your flux stores. By having a consistent, defined methodolgy, applications are more scalable, onboarding is easier, and the codebase can be more easily reasonable about. <a href="https://github.com/lmiller1990/flux-entities"><code class="inline">flux-entities</code></a> provides type definitions and helper functions, adhering the the patterns described in this article and in more detail on the library’s GitHub page.</p>
+
+  </div>
+</body>
+</html>
