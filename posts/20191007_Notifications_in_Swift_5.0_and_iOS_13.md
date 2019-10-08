@@ -131,4 +131,39 @@ func setNotification() -> Void {
 }
 ```
 
-Click on "Set Notification" and minimize the test app. After 5 seconds pass, you should see the notification! If you did **not** minimize the app, you will notice the notification does not show. We will address this later. Until iOS 12, notifications would not show if the app was in the foreground, however from iOS 12 you are able to show notifications in both the foreground and background.
+Click on "Set Notification" and minimize the test app. After 5 seconds pass, you should see the notification! If you did **not** minimize the app, you will notice the notification does not show. We will address this later. Until iOS 12, notifications would not show if the app was in the foreground, however from iOS 12 you are able to show notifications in both the foreground and background. To do this, you need to add a bit of extra code in `AppDelegate.swift`. When you extend a class using a delegate, you enable the class to hand off some behaviour to an instance of another type. 
+
+According to the [docs](https://developer.apple.com/documentation/usernotifications/unusernotificationcenterdelegate), the `UNUserNotificationCenterDelegate` is used to handle incoming notifications. We can use the [`userNotificationCenter(_:willPresent:withCompletionHandler:)`](https://developer.apple.com/documentation/usernotifications/unusernotificationcenterdelegate/1649518-usernotificationcenter) to "ask the delegate how to handle a notification that arrived while the app was running in the foreground". This is exactly what we need.
+
+Update `AppDelegate.swift`:
+
+```swift
+import UIKit
+import CoreData
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions)
+        -> Void) {
+        completionHandler([.alert, .badge, .sound])
+    }
+    
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Override point for customization after application launch.
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    // ... omitted
+}
+```
+
+There are several changes:
+
+- Add `UNUserNotificationCenterDelegate` to the class declaration
+- Add a `userNotificationCenter` function that calls the `completionHandler`
+- Assign `UNUserNotificationCenter.current().delegate` to `self` in `application`
