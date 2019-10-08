@@ -6,6 +6,8 @@ This article was published on 07/10/2019.
 
 Create a new Single Page app! That's it.
 
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/2.png)
+
 ## Creating the Interface
 
 This app will use a very simple interface built using the new `SwiftUI`. In `ContentView.swift`, add the following:
@@ -23,7 +25,7 @@ struct ContentView: View {
         VStack {
             Text("Notification Demo")
             Button(action: { self.setNotification() }) {
-                Text("Set Notification")
+                Text("Set Notification!")
             }
         }
     }
@@ -35,6 +37,10 @@ struct ContentView_Previews: PreviewProvider {
     }
 }
 ```
+
+You should be able to preview this using the `canvas`. If it is not shown, click "Help" and type "canvas". It looks like this:
+
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/3.png)
 
 This will let us set a notification by pressing a button. Let's move onto the main topic: `UNUserNotificationCenter`. Create a new file, `LocalNotificationManager.swift`, with some boilerplate code:
 
@@ -78,6 +84,10 @@ class LocalNotificationManager {
 }
 ```
 
+You can use the simulator or a real device to try this. You should see the following:
+
+![](https://github.com/lmiller1990/electic/blob/master/screenshots/ios/1.png?raw=true)
+
 ## Adding Notifications
 
 Next, let's make a method to add notifications. This will **not** schedule them - that comes later.
@@ -119,14 +129,9 @@ If you have a device, or use the simulator, you can try this out by updating the
 
 ```swift
 func setNotification() -> Void {
-    let notification = Notification(
-        id: UUID().uuidString,
-        title: "This is a test reminder"
-    )
-    
     let manager = LocalNotificationManager()
     manager.requestPermission()
-    manager.addNotification(notification: notification)
+    manager.addNotification(title: "This is a test reminder"))
     manager.scheduleNotification()
 }
 ```
@@ -167,3 +172,82 @@ There are several changes:
 - Add `UNUserNotificationCenterDelegate` to the class declaration
 - Add a `userNotificationCenter` function that calls the `completionHandler`
 - Assign `UNUserNotificationCenter.current().delegate` to `self` in `application`
+
+Now you can press "Set Notification" and see a notification appear in-app.
+
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/4.png)
+
+## A Refactor using `getNotificationSettings`
+
+We can improve the code a bit - namely, only ask for permission if we haven't already asked. Add a `schedule` function to the `LocalNotificationManager` class:
+
+```swift
+func schedule() -> Void {
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+          switch settings.authorizationStatus {
+          case .notDetermined:
+              self.requestPermission()
+          case .authorized, .provisional:
+              self.scheduleNotifications()
+          default:
+              break
+          }
+      }
+  }
+```
+
+Now we don't need to know the authorization status - just call `schedule`. Since we still want to schedule notifications after asking for permission, update `requestPermission`:
+
+```swift
+func requestPermission() -> Void {
+    UNUserNotificationCenter
+        .current()
+        .requestAuthorization(options: [.alert, .badge, .alert]) { granted, error in
+            if granted == true && error == nil {
+                self.scheduleNotifications()
+                // We have permission!
+            }
+    }
+}
+```
+
+The final code for `ContentView.swift` is now as follows:
+
+```swift
+import SwiftUI
+import Foundation
+
+
+struct ContentView: View {
+    
+    func setNotification() -> Void {
+        let manager = LocalNotificationManager()
+        manager.addNotification(title: "This is a test reminder")
+        manager.schedule()
+    }
+    
+    var body: some View {
+        VStack {
+            Text("Notification Demo")
+            Button(action: { self.setNotification() }) {
+                Text("Set Notification!")
+            }
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+```
+
+## Conclusion
+
+This article introduces a number of things, including:
+
+1. `UNUserNotificationCenter`
+2. SwiftUI (not the main focus, but still nice!)
+3. Using delegates, specifically the `UNUserNotificationCenterDelegate`
+4. The `requestAuthorization` API

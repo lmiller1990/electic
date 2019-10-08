@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20191007 Notifications in Swift 5
+  </h1>
+
+  <div class="post_body">
+    <p>Today I decided to start learning iOS programming. I’ve had a great experience with React Native, but some things are just nicer done native. This article covers local notifications, using <code class="inline">UNUserNotificationCenter</code>. I’m using Swift 5, Xcode 11 and iOS 13.</p>
+<p>This article was published on 07/10/2019.</p>
+<h2>Setup</h2>
+<p>Create a new Single Page app! That’s it.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/2.png" alt=""/></p>
+<h2>Creating the Interface</h2>
+<p>This app will use a very simple interface built using the new <code class="inline">SwiftUI</code>. In <code class="inline">ContentView.swift</code>, add the following:</p>
+<pre><code class="swift lang-swift language-swift">import SwiftUI
+
+struct ContentView: View {
+    
+    func setNotification() -&gt; Void {
+        
+    }
+    
+    var body: some View {
+        VStack {
+            Text(&quot;Notification Demo&quot;)
+            Button(action: { self.setNotification() }) {
+                Text(&quot;Set Notification!&quot;)
+            }
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}</code></pre>
+<p>You should be able to preview this using the <code class="inline">canvas</code>. If it is not shown, click “Help” and type “canvas”. It looks like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/3.png" alt=""/></p>
+<p>This will let us set a notification by pressing a button. Let’s move onto the main topic: <code class="inline">UNUserNotificationCenter</code>. Create a new file, <code class="inline">LocalNotificationManager.swift</code>, with some boilerplate code:</p>
+<pre><code class="swift lang-swift language-swift">struct Notification {
+    var id: String
+    var title: String
+}
+
+class LocalNotificationManager {
+    var notifications = [Notification]()
+}</code></pre>
+<p>Now we will build four functions to handle the notification flow. We need to request permission to show notifications, then schedule some notifications.</p>
+<h2>Requesting Permission</h2>
+<p>Add a <code class="inline">requestAuthorization</code> method. This will request permission to show notifications, and if permission is granted, then schedule any existing notifications the application has created.</p>
+<pre><code class="swift lang-swift language-swift">import UserNotifications
+
+struct Notification {
+    var id: String
+    var title: String
+}
+
+class LocalNotificationManager {
+    var notifications = [Notification]()
+    
+    func requestPermission() -&gt; Void {
+        UNUserNotificationCenter
+            .current()
+            .requestAuthorization(options: [.alert, .badge, .alert]) { granted, error in
+                if granted == true &amp;&amp; error == nil {
+                    // We have permission!
+                }
+        }
+    }
+}</code></pre>
+<p>You can use the simulator or a real device to try this. You should see the following:</p>
+<p><img src="https://github.com/lmiller1990/electic/blob/master/screenshots/ios/1.png?raw=true" alt=""/></p>
+<h2>Adding Notifications</h2>
+<p>Next, let’s make a method to add notifications. This will <strong>not</strong> schedule them - that comes later.</p>
+<pre><code class=" lang- language-">func addNotification(title: String) -&gt; Void {
+    notifications.append(Notification(id: UUID().uuidString, title: title))
+}</code></pre>
+<p>Simple stuff. We use a <code class="inline">UUID</code> to ensure the <code class="inline">id</code> is unique.</p>
+<h2>Scheduling Notifications</h2>
+<p>Now we have a way to request permission and to add some notifications - let’s schedule them with a <code class="inline">scheduleNotifications</code> function.</p>
+<pre><code class="swift lang-swift language-swift">func scheduleNotifications() -&gt; Void {
+    for notification in notifications {
+        let content = UNMutableNotificationContent()
+        content.title = notification.title
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(identifier: notification.id, content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            guard error == nil else { return }
+            print(&quot;Scheduling notification with id: \(notification.id)&quot;)
+        }
+    }
+}</code></pre>
+<p>There are few interesting things here. Firstly, we use <code class="inline">UNMutableNotificationContent</code>. The rest of the code is modelled after the example from the <a href="https://developer.apple.com/documentation/usernotifications/unmutablenotificationcontent?changes=_11">Apple Developer docs</a>. The name <code class="inline">Mutable</code> suggests there is an <code class="inline">Immutable</code> type - ther isn’t. From what I gathered, the mutable here refers to the part of a <code class="inline">UNNotification</code> that <strong>is</strong> mutable - that is, the content the developer is free to modify.</p>
+<p>This example sets a notification to appear in 5 seconds. Other types of notifications include <a href="https://developer.apple.com/documentation/usernotifications/uncalendarnotificationtrigger"><code class="inline">UNCalendarNotificationTriggger</code></a>. <a href="https://developer.apple.com/documentation/usernotifications/unlocationnotificationtrigger"><code class="inline">UNLocationNotificationTrigger</code></a> and <a href="https://developer.apple.com/documentation/usernotifications/unpushnotificationtrigger"><code class="inline">UNPushNotificationTrigger</code></a>.</p>
+<p>If you have a device, or use the simulator, you can try this out by updating the <code class="inline">setNotification</code> function in <code class="inline">ContentView.swift</code>:</p>
+<pre><code class="swift lang-swift language-swift">func setNotification() -&gt; Void {
+    let manager = LocalNotificationManager()
+    manager.requestPermission()
+    manager.addNotification(title: &quot;This is a test reminder&quot;))
+    manager.scheduleNotification()
+}</code></pre>
+<p>Click on “Set Notification” and minimize the test app. After 5 seconds pass, you should see the notification! If you did <strong>not</strong> minimize the app, you will notice the notification does not show. We will address this later. Until iOS 12, notifications would not show if the app was in the foreground, however from iOS 12 you are able to show notifications in both the foreground and background. To do this, you need to add a bit of extra code in <code class="inline">AppDelegate.swift</code>. When you extend a class using a delegate, you enable the class to hand off some behaviour to an instance of another type. </p>
+<p>According to the <a href="https://developer.apple.com/documentation/usernotifications/unusernotificationcenterdelegate">docs</a>, the <code class="inline">UNUserNotificationCenterDelegate</code> is used to handle incoming notifications. We can use the <a href="https://developer.apple.com/documentation/usernotifications/unusernotificationcenterdelegate/1649518-usernotificationcenter"><code class="inline">userNotificationCenter(_:willPresent:withCompletionHandler:)</code></a> to “ask the delegate how to handle a notification that arrived while the app was running in the foreground”. This is exactly what we need.</p>
+<p>Update <code class="inline">AppDelegate.swift</code>:</p>
+<pre><code class="swift lang-swift language-swift">import UIKit
+import CoreData
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions)
+        -&gt; Void) {
+        completionHandler([.alert, .badge, .sound])
+    }
+    
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -&gt; Bool {
+        // Override point for customization after application launch.
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    // ... omitted
+}</code></pre>
+<p>There are several changes:</p>
+<ul>
+<li>Add <code class="inline">UNUserNotificationCenterDelegate</code> to the class declaration
+</li>
+<li>Add a <code class="inline">userNotificationCenter</code> function that calls the <code class="inline">completionHandler</code>
+</li>
+<li>Assign <code class="inline">UNUserNotificationCenter.current().delegate</code> to <code class="inline">self</code> in <code class="inline">application</code>
+</li>
+</ul>
+<p>Now you can press “Set Notification” and see a notification appear in-app.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/ios/4.png" alt=""/></p>
+<h2>A Refactor using <code class="inline">getNotificationSettings</code></h2>
+<p>We can improve the code a bit - namely, only ask for permission if we haven’t already asked. Add a <code class="inline">schedule</code> function to the <code class="inline">LocalNotificationManager</code> class:</p>
+<pre><code class="swift lang-swift language-swift">func schedule() -&gt; Void {
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+          switch settings.authorizationStatus {
+          case .notDetermined:
+              self.requestPermission()
+          case .authorized, .provisional:
+              self.scheduleNotifications()
+          default:
+              break
+          }
+      }
+  }</code></pre>
+<p>Now we don’t need to know the authorization status - just call <code class="inline">schedule</code>. Since we still want to schedule notifications after asking for permission, update <code class="inline">requestPermission</code>:</p>
+<pre><code class="swift lang-swift language-swift">func requestPermission() -&gt; Void {
+    UNUserNotificationCenter
+        .current()
+        .requestAuthorization(options: [.alert, .badge, .alert]) { granted, error in
+            if granted == true &amp;&amp; error == nil {
+                self.scheduleNotifications()
+                // We have permission!
+            }
+    }
+}</code></pre>
+<p>The final code for <code class="inline">ContentView.swift</code> is now as follows:</p>
+<pre><code class="swift lang-swift language-swift">import SwiftUI
+import Foundation
+
+
+struct ContentView: View {
+    
+    func setNotification() -&gt; Void {
+        let manager = LocalNotificationManager()
+        manager.addNotification(title: &quot;This is a test reminder&quot;)
+        manager.schedule()
+    }
+    
+    var body: some View {
+        VStack {
+            Text(&quot;Notification Demo&quot;)
+            Button(action: { self.setNotification() }) {
+                Text(&quot;Set Notification!&quot;)
+            }
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}</code></pre>
+<h2>Conclusion</h2>
+<p>This article introduces a number of things, including:</p>
+<ol>
+<li><code class="inline">UNUserNotificationCenter</code>
+</li>
+<li>SwiftUI (not the main focus, but still nice!)
+</li>
+<li>Using delegates, specifically the <code class="inline">UNUserNotificationCenterDelegate</code>
+</li>
+<li>The <code class="inline">requestAuthorization</code> API
+</li>
+</ol>
+
+  </div>
+</body>
+</html>
