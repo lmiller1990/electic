@@ -23,5 +23,6 @@ li, ol, ul, h1, h2, h3, p, pre {
 
 img {
   max-width: 100%;
+  max-height: 80vh;
 }
 
