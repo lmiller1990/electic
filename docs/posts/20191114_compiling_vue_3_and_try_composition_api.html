@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20191114 Compiling Vue 3 and try Composition API
+  </h1>
+
+  <div class="post_body">
+    <p>In this article we compile Vue 3 from the latest source and try out some of the new APIs, include the upcoming composition API. This is the app we will be building:</p>
+<p>GIF_1</p>
+<p>I’ll take a look at the new composition API. You can read the RFC <a href="https://vue-composition-api-rfc.netlify.com/#summary">here</a>. Sine Vue 3 is still under active development, and not even available on npm yet, some features and APIs may change - this article reflects the current state as of the 14th of Nov, 2019.</p>
+<h2>Getting and Compiling Vue 3</h2>
+<p>First, cloned the <code class="inline">vue-next</code> repo: <code class="inline">git clone https://github.com/vuejs/vue-next.git</code>. Now, <code class="inline">cd vue-next</code> and install the dependencies by running <code class="inline">yarn install</code>, then build the packages by running <code class="inline">yarn build</code>. This might take a while.</p>
+<p>Next, we need a minimal <code class="inline">index.ts</code> and <code class="inline">index.html</code>. <code class="inline">index.html</code> looks like this:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+  &lt;meta http-equiv=&quot;X-UA-Compatible&quot; content=&quot;ie=edge&quot;&gt;
+  &lt;title&gt;Document&lt;/title&gt;
+  &lt;script src=&quot;./packages/vue/dist/vue.global.js&quot;&gt;&lt;/script&gt;
+  &lt;script src=&quot;./dist/bundle.js&quot;&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt; 
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>We have added two script tags - one for the <code class="inline">./dist/bundle.js</code> we will be compiling soon, and one for the browser build of Vue 3, which was compiled when we ran <code class="inline">yarn build</code> in the <code class="inline">packages/vue/dist/vue.global.js</code> directory.</p>
+<p>Next, add a basic <code class="inline">index.ts</code>:</p>
+<p>And <code class="inline">index.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">export {}</code></pre>
+<p>Since we will use TypeScript, we will need a few dependencies and a basic <code class="inline">webpack.config.js</code> to compile for use in a browser. Install them:</p>
+<pre><code class="sh lang-sh language-sh">yarn add yarn add awesome-typescript-loader source-map-loader webpack-cli webpack -W</code></pre>
+<p>We need <code class="inline">-W</code> since we are currently are in a git repository containing several sub packages (in the <code class="inline">packages</code> directory, Vue 3 is very modular like that) and we want to install the dependencies to the top level. We will piggyback of the existing <code class="inline">tsconfig.json</code> - but we don’t want to watch the entire repository during development, since we have already built the project when we ran <code class="inline">yarn build</code> earlier. In the existing <code class="inline">tsconfig.json</code>, remove all the entires in the <code class="inline">&quot;include&quot;</code> array. </p>
+<p>Next, I created a <code class="inline">webpack.config.js</code> and added the following:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+const { CheckerPlugin } = require(&#39;awesome-typescript-loader&#39;)
+
+module.exports = {
+  entry: &#39;./index.ts&#39;,
+  devtool: &#39;source-map&#39;,
+
+  output: {
+    path: path.resolve(__dirname, &#39;dist&#39;),
+    filename: &#39;bundle.js&#39;
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ts/,
+        exclude: /node_modules/,
+        loader: &#39;awesome-typescript-loader&#39;
+      },
+      { enforce: &#39;pre&#39;, test: /\.js$/, loader: &#39;source-map-loader&#39; }
+    ]
+  },
+  resolve: {
+    extensions: [&#39;.ts&#39;, &#39;.js&#39;]
+  },
+  plugins: [new CheckerPlugin()]
+}</code></pre>
+<p>Okay, now we are ready to start hacking. I had bit of trouble getting everything to work - I was really hoping to import a bunch of TypeScript methods and get autocompletion out of the box, but either I didn’t build the packages right or I’m missing something, or it’s just too early for that in development of Vue 3. So we will need some type definitions. The TypeScript experience is, to me, the killer feature of Vue 3, not the new APIs or other features.</p>
+<h2>Building an App with Vue 3 and TypeScipt</h2>
+<p>Start by updaing <code class="inline">index.ts</code> with the following:</p>
+<pre><code class="ts lang-ts language-ts">interface IVueNextAPI {
+  createApp: () =&gt; {
+    mount: (appEl: object, selector: string) =&gt; void
+  }
+}
+
+declare global {
+  interface Window {
+    Vue: IVueNextAPI
+  }
+}
+
+interface InfoProps {
+  count: string
+  message: string
+}
+
+const Info = {
+  setup(props: InfoProps) {
+    return props
+  },
+
+  template: `
+    &lt;div&gt;
+      &lt;h3&gt;Info&lt;/h3&gt;
+      &lt;div&gt;{{ message }}&lt;/div&gt;
+      &lt;div&gt;Count is: {{ count }}&lt;/div&gt;
+    &lt;/div&gt;
+  `
+}
+
+interface AppSetup {
+  count: number
+}
+
+const App = {
+  components: {
+    Info
+  },
+
+  setup(): AppSetup {
+    return {
+      count: 0
+    }
+  },
+
+  template: `
+    &lt;Info 
+      :count=&quot;count&quot;
+      message=&quot;Hello from Vue 3&quot;
+    /&gt;
+  `
+}
+
+window.addEventListener(&#39;DOMContentLoaded&#39;, () =&gt; {
+  window.Vue.createApp().mount(App, &#39;#app&#39;)
+})
+
+export {}</code></pre>
+<p>I tried using the definitions generated during the <code class="inline">yarn build</code> step earlier, but I couldn’t get it working - TS errors everywhere, so for now I just made some minimal types to get us started. We no longer do <code class="inline">const app = new Vue(....).$mount(&#39;#app&#39;)</code> anymore - Vue 3 exposes a <code class="inline">createApp</code> function, which returns a <code class="inline">mount</code> method to which you pass your root component and selector. </p>
+<p>Ideally, we would use <code class="inline">tsx</code> in <code class="inline">render</code> functions, however I couldn’t get that working either, so for now I’ll just use string literals with <code class="inline">template</code>. In the future, <code class="inline">tsx</code> and render functions will be supported, and we should be able to get static typechecking on our templates, like in React when using <code class="inline">tsx</code>! </p>
+<p>You can see there is now a <code class="inline">setup</code> function, which takes the props as the first argument, as shown in the <code class="inline">Info</code> component. Since <code class="inline">App</code> is the top level component, it does not receive any props. <code class="inline">setup</code> returns and object which is what would be saved in <code class="inline">data</code> and <code class="inline">computed</code> fields in the current Vue 2 API. This will still be an option in Vue 3, as well. </p>
+<p>Whatever you return from <code class="inline">setup</code> are made available in the <code class="inline">template</code> function. I like to define this object as <code class="inline">XXXSetup</code>, where <code class="inline">XXX</code> is the name of component. It’s like a schema for your component; it tells the developer what the setup function’s API looks like. Think of it like a form a documentation.</p>
+<p><code class="inline">setup</code> is called once, when the component is created for the first time (like the existing <code class="inline">created</code> lifecycle method). The above code renders the following entirely uninteresting Vue app:</p>
+<p>SS_1</p>
+<p>Let’s explore some more of the new APIs.</p>
+<h2>Using <code class="inline">reactive</code></h2>
+<p>Vue now exposes a <code class="inline">reactive</code> method. This lets us make any object… reactive. The type definition looks like this, taken from <a href="https://vue-composition-api-rfc.netlify.com/api.html#reactive">here</a>:</p>
+<pre><code class="ts lang-ts language-ts">interface IVueNextAPI {
+  createApp: () =&gt; {
+    mount: (appEl: object, selector: string) =&gt; void
+  }
+
+  reactive: &lt;T extends object&gt;(raw: T) =&gt; T
+}</code></pre>
+<p>We can update the <code class="inline">setup</code> function in <code class="inline">App</code> using the new <code class="inline">reactive</code> function. <code class="inline">reactive</code> takes an object - count is a primitive. You can use another new API, <code class="inline">ref</code>, for primitive values, but for now let’s use <code class="inline">reactive</code> with a <code class="inline">count</code> key. This will make it easy to add more reactive properties soon. They are actually slightly difference, you can read more <a href="https://vue-composition-api-rfc.netlify.com/#ref-vs-reactive">here in the RFC</a>.</p>
+<p>Update <code class="inline">App</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface AppSetup {
+  state: {
+    count: number
+  }
+  increment: () =&gt; void
+}
+
+const App = {
+  components: {
+    Info
+  },
+
+  setup(): AppSetup {
+    const state = window.Vue.reactive({ count: 0 })
+
+    const increment = () =&gt; {
+      state.count += 1
+    }
+
+    return {
+      state,
+      increment
+    }
+  },
+
+  template: `
+    &lt;Info 
+      :count=&quot;state.count&quot;
+      message=&quot;Hello from Vue 3&quot;
+      :increment=&quot;increment&quot;
+    /&gt;
+  `
+}</code></pre>
+<p>Next, update <code class="inline">Info</code> to use the new <code class="inline">increment</code> function:</p>
+<pre><code class="ts lang-ts language-ts">interface InfoProps {
+  count: string
+  message: string
+  increment: () =&gt; void
+}
+
+const Info = {
+  setup(props: InfoProps) {
+    return props
+  },
+
+  template: `
+    &lt;div&gt;
+      &lt;h3&gt;Info&lt;/h3&gt;
+      &lt;div&gt;{{ message }}&lt;/div&gt;
+      &lt;div&gt;Count is: {{ count }}&lt;/div&gt;
+      &lt;button @click=&quot;increment&quot;&gt;Increment&lt;/button&gt;
+    &lt;/div&gt;
+  `
+}</code></pre>
+<p>Clicking the <code class="inline">increment</code> updates the <code class="inline">count</code>, using Vue’s mutation based update logic. Next I’ll show how to use the <code class="inline">computed</code> API.</p>
+<h2><code class="inline">computed</code></h2>
+<p>Let’s say we want the <code class="inline">message</code> prop to be dynamic, based on the value of <code class="inline">count</code>. We can use <code class="inline">computed</code>. Update the type definition, which in it’s basic form is the same as <code class="inline">reactive</code>. Also update <code class="inline">App</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface AppSetup {
+  state: {
+    count: number
+  }
+  message: () =&gt; string
+  increment: () =&gt; void
+}
+
+const App = {
+  components: {
+    Info
+  },
+
+  setup(): AppSetup {
+    const state = window.Vue.reactive({ 
+      count: 0,
+    })
+
+    const increment = () =&gt; {
+      state.count += 1
+    }
+
+    return {
+      state,
+      increment,
+      message: window.Vue.computed(() =&gt; `Count is: ${state.count}`)
+    }
+  },
+
+  template: `
+    &lt;Info 
+      :count=&quot;state.count&quot;
+      :message=&quot;message&quot;
+      :increment=&quot;increment&quot;
+    /&gt;
+  `
+}</code></pre>
+<p>At first I tried to do <code class="inline">message: \</code>Count is ${state.count}`<code class="inline">. That does not work.</code>setup<code class="inline">only runs once - you will just get a string that does _not_ update reatively. You need to pass a</code>computed` function. This lets Vue keep track of the changes.</p>
+<p>SS_2</p>
+<h2><code class="inline">watch</code></h2>
+<p>Now we have two count messages that increment together. Let’s take a look at another familiar API from Vue 2, <code class="inline">watch</code>. There are quite a few type overloads if you dig deep into the repo, I’ll just demonstrate the simplest here.</p>
+<pre><code class="ts lang-ts language-ts">type StopHandle = () =&gt; void
+
+interface Ref&lt;T&gt; {
+  value: T
+}
+
+type WatcherSource&lt;T&gt; = Ref&lt;T&gt; | (() =&gt; T)
+
+interface IVueNextAPI {
+  createApp: () =&gt; {
+    mount: (appEl: object, selector: string) =&gt; void
+  }
+
+  reactive: &lt;T extends object&gt;(raw: T) =&gt; T
+
+  computed: &lt;T extends object&gt;(raw: T) =&gt; T
+
+  watch&lt;T&gt;(
+    source: WatcherSource&lt;T&gt;,
+    effect: (
+      value: T,
+      oldValue: T,
+    ) =&gt; void,
+  ): StopHandle
+}</code></pre>
+<p><code class="inline">watch</code> now returns a <code class="inline">stop</code> function, which you can call to cancel the watching. It’s a bit easier to understand once you see it in action. I’ll also add a bit more type safety to the <code class="inline">AppSetup</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface State {
+  count: number
+  notifications: Array&lt;{ id: number, content: string }&gt;
+}
+
+interface AppSetup {
+  state: State
+  message: () =&gt; string
+  increment: () =&gt; void
+  stop: () =&gt; void
+}
+
+const App = {
+  components: {
+    Info
+  },
+
+  setup(): AppSetup {
+    const state: State = window.Vue.reactive({ 
+      count: 0,
+      notifications: []
+    })
+
+    const increment = () =&gt; {
+      state.count += 1
+    }
+
+    const stop = window.Vue.watch(() =&gt; state.count, (val, oldVal) =&gt; {
+      state.notifications.push(
+        {
+          id: state.notifications.length + 1,
+          content: `${oldVal} =&gt; ${val}`
+        }
+      )
+    })
+
+
+    return {
+      state,
+      increment,
+      stop,
+      message: window.Vue.computed(() =&gt; `Count is: ${state.count}`)
+    }
+  },
+
+  template: `
+    &lt;Info 
+      :count=&quot;state.count&quot;
+      :notifications=&quot;state.notifications&quot;
+      :message=&quot;message&quot;
+      :increment=&quot;increment&quot;
+      :stop=&quot;stop&quot;
+    /&gt;
+  `
+}</code></pre>
+<p><code class="inline">watch</code>, takes a function, which should reutrn the <code class="inline">reactive</code> object to watch. The next argument is a callback which is called when the watched value mutates. The callback receives the newly updated value and the previous value, just as it does in Vue 2. </p>
+<p>In the body of the callback, you implement whatever you want to occur when the value changes. In this case, I push to an array, showing how the value changed. <code class="inline">watch</code> returns a function which I called <code class="inline">stop</code>. When you call <code class="inline">stop</code>, the watcher will cease to watch the values.</p>
+<p>The updated <code class="inline">Info</code> implementation using <code class="inline">stop</code> and displaying <code class="inline">notifications</code> is as follows:</p>
+<pre><code class="ts lang-ts language-ts">interface InfoProps {
+  count: string
+  message: string
+  notifications: Array&lt;{ id: number, content: string }&gt;
+  increment: () =&gt; void
+  stop: () =&gt; void
+}
+
+const Info = {
+  setup(props: InfoProps) {
+    return props
+  },
+
+  template: `
+    &lt;div&gt;
+      &lt;h3&gt;Info&lt;/h3&gt;
+      &lt;div&gt;{{ message }}&lt;/div&gt;
+      &lt;div&gt;Count is: {{ count }}&lt;/div&gt;
+      &lt;button @click=&quot;increment&quot;&gt;Increment&lt;/button&gt;
+
+      &lt;h4&gt;Notifications&lt;/h4&gt;
+      &lt;button @click=&quot;stop&quot;&gt;Stop&lt;/button&gt;
+      &lt;ul&gt;
+        &lt;li v-for=&quot;notification in notifications&quot; :key=&quot;notification.id&quot;&gt;
+          {{ notification.content }}
+        &lt;/li&gt;
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  `
+}</code></pre>
+<p>SS_3</p>
+<p>This is a pretty basic app, but it does a good job of showing of the new Vue 3 composition API.</p>
+<h2>Thoughts</h2>
+<p>The new composition API RFC has received mixed feedback from the community. One thing I think is important to remember is the composition API is additive - none of the existing Vue 2 APIs is going away. Here are some of nice things about it, and Vue 3 in general:</p>
+<ul>
+<li>The entire codebase is in TypeScript, which means we get better type checking and assistance from the IDE.
+</li>
+<li>The composition API allows for better Typescript support. I think this is the real killer feature - I don’t have a strong opinion on which API I like better, I just want to have type safety so I can build bug free applications and deliver value to clients.
+</li>
+<li>It is certainly a departure from what I first liked about Vue - simple and seemingly “magic” reactivity.
+</li>
+<li>Good support for <code class="inline">tsx</code> - not my preferred way to write templates, but if it means better type safety, I’ll take it.
+</li>
+</ul>
+<p>Some of the cons are:</p>
+<ul>
+<li>Two ways to write Vue components - just because you know one Vue app well, another might be completely different. This is kind of how I feel about React now. Some codebases use <code class="inline">class</code> component with lifecycle methods, and other use <code class="inline">function</code> components with the new React hooks. It’s a bit tiring to learn so many ways to do the same thing.
+</li>
+<li>likely more work to write a plugin supporting two different APIs.
+</li>
+<li>You need to learn something new. If you don’t like learning new things, you probably don’t belong in the modern JS world anyway. Not sure if this is a good or bad thing :shrug:
+</li>
+</ul>
+<h2>Conclusion</h2>
+<p>We explored the new composition API and Vue 3 by compiling it from source. Exciting times are ahead!</p>
+
+  </div>
+</body>
+</html>
