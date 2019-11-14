@@ -1,12 +1,14 @@
 In this article we compile Vue 3 from the latest source and try out some of the new APIs, include the upcoming composition API. This is the app we will be building:
 
-GIF_1
+![](https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/GIF_1.gif)
 
-I'll take a look at the new composition API. You can read the RFC [here](https://vue-composition-api-rfc.netlify.com/#summary). Sine Vue 3 is still under active development, and not even available on npm yet, some features and APIs may change - this article reflects the current state as of the 14th of Nov, 2019.
+I'll take a look at the new composition API. You can read the RFC [here](https://vue-composition-api-rfc.netlify.com/#summary). Sine Vue 3 is still under active development, and not even available on npm yet, some features and APIs may change - this article reflects the current state as of the 14th of Nov, 2019. 
+
+As we get closer to Vue 3, the best place for official learning resources is [VueSchool's upcoming Vue 3 course](https://vueschool.io/courses/the-vuejs-3-master-class?friend=vth), by Vue 3 contributors [Alex Kyriakidis](https://github.com/hootlex) and [Chris Fritz](https://github.com/chrisvfritz). In the meantime, the best resource I've found that covers everything is their [Master Class](https://vueschool.io/the-vuejs-master-class#featured-lessons?friend=vth). They have a Black Friday sale coming up, so check that out if you want to learn more about Vue and Vue 3!
 
 ## Getting and Compiling Vue 3
 
-First, cloned the `vue-next` repo: `git clone https://github.com/vuejs/vue-next.git`. Now, `cd vue-next` and install the dependencies by running `yarn install`, then build the packages by running `yarn build`. This might take a while.
+To get started with Vue 3, clone the `vue-next` repo: `git clone https://github.com/vuejs/vue-next.git`. Now, `cd vue-next` and install the dependencies by running `yarn install`, then build the packages by running `yarn build`. This might take a while.
 
 Next, we need a minimal `index.ts` and `index.html`. `index.html` looks like this:
 
@@ -154,7 +156,7 @@ Whatever you return from `setup` are made available in the `template` function. 
 
 `setup` is called once, when the component is created for the first time (like the existing `created` lifecycle method). The above code renders the following entirely uninteresting Vue app:
 
-SS_1
+![](https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_1.png)
 
 Let's explore some more of the new APIs.
 
@@ -285,7 +287,7 @@ const App = {
 
 At first I tried to do `message: \`Count is ${state.count}\``. That does not work. `setup` only runs once - you will just get a string that does _not_ update reatively. You need to pass a `computed` function. This lets Vue keep track of the changes.
 
-SS_2
+![](https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_2.png)
 
 ## `watch`
 
@@ -418,7 +420,7 @@ const Info = {
 }
 ```
 
-SS_3
+![](https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_3.png)
 
 This is a pretty basic app, but it does a good job of showing of the new Vue 3 composition API.
 
@@ -440,3 +442,5 @@ Some of the cons are:
 ## Conclusion
 
 We explored the new composition API and Vue 3 by compiling it from source. Exciting times are ahead!
+
+For more learning resources, I've found [Vue School](https://vueschool.io/?friend=vth) to have the best courses. The teachers, Alex and Chris, are core contributors to Vue and the upcoming Vue 3, and have been for many years. They were a big help to me when learning Vue. They also have an [upcoming Vue 3 master class](https://vueschool.io/courses/the-vuejs-3-master-class?friend=vth) which I'm looking forward to. Alex mentioned they have a big sale coming up for Black Friday, so check their courses out if you looking for more Vue resources.

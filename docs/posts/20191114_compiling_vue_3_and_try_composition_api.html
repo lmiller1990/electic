@@ -15,10 +15,11 @@
 
   <div class="post_body">
     <p>In this article we compile Vue 3 from the latest source and try out some of the new APIs, include the upcoming composition API. This is the app we will be building:</p>
-<p>GIF_1</p>
-<p>I’ll take a look at the new composition API. You can read the RFC <a href="https://vue-composition-api-rfc.netlify.com/#summary">here</a>. Sine Vue 3 is still under active development, and not even available on npm yet, some features and APIs may change - this article reflects the current state as of the 14th of Nov, 2019.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/GIF_1.gif" alt=""/></p>
+<p>I’ll take a look at the new composition API. You can read the RFC <a href="https://vue-composition-api-rfc.netlify.com/#summary">here</a>. Sine Vue 3 is still under active development, and not even available on npm yet, some features and APIs may change - this article reflects the current state as of the 14th of Nov, 2019. </p>
+<p>As we get closer to Vue 3, the best place for official learning resources is <a href="https://vueschool.io/courses/the-vuejs-3-master-class?friend=vth">VueSchool’s upcoming Vue 3 course</a>, by Vue 3 contributors <a href="https://github.com/hootlex">Alex Kyriakidis</a> and <a href="https://github.com/chrisvfritz">Chris Fritz</a>. In the meantime, the best resource I’ve found that covers everything is their <a href="https://vueschool.io/the-vuejs-master-class#featured-lessons?friend=vth">Master Class</a>. They have a Black Friday sale coming up, so check that out if you want to learn more about Vue and Vue 3!</p>
 <h2>Getting and Compiling Vue 3</h2>
-<p>First, cloned the <code class="inline">vue-next</code> repo: <code class="inline">git clone https://github.com/vuejs/vue-next.git</code>. Now, <code class="inline">cd vue-next</code> and install the dependencies by running <code class="inline">yarn install</code>, then build the packages by running <code class="inline">yarn build</code>. This might take a while.</p>
+<p>To get started with Vue 3, clone the <code class="inline">vue-next</code> repo: <code class="inline">git clone https://github.com/vuejs/vue-next.git</code>. Now, <code class="inline">cd vue-next</code> and install the dependencies by running <code class="inline">yarn install</code>, then build the packages by running <code class="inline">yarn build</code>. This might take a while.</p>
 <p>Next, we need a minimal <code class="inline">index.ts</code> and <code class="inline">index.html</code>. <code class="inline">index.html</code> looks like this:</p>
 <pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
 &lt;html lang=&quot;en&quot;&gt;
@@ -135,7 +136,7 @@ export {}</code></pre>
 <p>You can see there is now a <code class="inline">setup</code> function, which takes the props as the first argument, as shown in the <code class="inline">Info</code> component. Since <code class="inline">App</code> is the top level component, it does not receive any props. <code class="inline">setup</code> returns and object which is what would be saved in <code class="inline">data</code> and <code class="inline">computed</code> fields in the current Vue 2 API. This will still be an option in Vue 3, as well. </p>
 <p>Whatever you return from <code class="inline">setup</code> are made available in the <code class="inline">template</code> function. I like to define this object as <code class="inline">XXXSetup</code>, where <code class="inline">XXX</code> is the name of component. It’s like a schema for your component; it tells the developer what the setup function’s API looks like. Think of it like a form a documentation.</p>
 <p><code class="inline">setup</code> is called once, when the component is created for the first time (like the existing <code class="inline">created</code> lifecycle method). The above code renders the following entirely uninteresting Vue app:</p>
-<p>SS_1</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_1.png" alt=""/></p>
 <p>Let’s explore some more of the new APIs.</p>
 <h2>Using <code class="inline">reactive</code></h2>
 <p>Vue now exposes a <code class="inline">reactive</code> method. This lets us make any object… reactive. The type definition looks like this, taken from <a href="https://vue-composition-api-rfc.netlify.com/api.html#reactive">here</a>:</p>
@@ -243,7 +244,7 @@ const App = {
   `
 }</code></pre>
 <p>At first I tried to do <code class="inline">message: \</code>Count is ${state.count}`<code class="inline">. That does not work.</code>setup<code class="inline">only runs once - you will just get a string that does _not_ update reatively. You need to pass a</code>computed` function. This lets Vue keep track of the changes.</p>
-<p>SS_2</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_2.png" alt=""/></p>
 <h2><code class="inline">watch</code></h2>
 <p>Now we have two count messages that increment together. Let’s take a look at another familiar API from Vue 2, <code class="inline">watch</code>. There are quite a few type overloads if you dig deep into the repo, I’ll just demonstrate the simplest here.</p>
 <pre><code class="ts lang-ts language-ts">type StopHandle = () =&gt; void
@@ -360,7 +361,7 @@ const Info = {
     &lt;/div&gt;
   `
 }</code></pre>
-<p>SS_3</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-3-testing/master/SS_3.png" alt=""/></p>
 <p>This is a pretty basic app, but it does a good job of showing of the new Vue 3 composition API.</p>
 <h2>Thoughts</h2>
 <p>The new composition API RFC has received mixed feedback from the community. One thing I think is important to remember is the composition API is additive - none of the existing Vue 2 APIs is going away. Here are some of nice things about it, and Vue 3 in general:</p>
@@ -385,6 +386,7 @@ const Info = {
 </ul>
 <h2>Conclusion</h2>
 <p>We explored the new composition API and Vue 3 by compiling it from source. Exciting times are ahead!</p>
+<p>For more learning resources, I’ve found <a href="https://vueschool.io/?friend=vth">Vue School</a> to have the best courses. The teachers, Alex and Chris, are core contributors to Vue and the upcoming Vue 3, and have been for many years. They were a big help to me when learning Vue. They also have an <a href="https://vueschool.io/courses/the-vuejs-3-master-class?friend=vth">upcoming Vue 3 master class</a> which I’m looking forward to. Alex mentioned they have a big sale coming up for Black Friday, so check their courses out if you looking for more Vue resources.</p>
 
   </div>
 </body>
