@@ -14,15 +14,498 @@
   </h1>
 
   <div class="post_body">
-    <p>Please pick a preset: Manually select features
-Check the features needed for your project: Babel, TS, Linter
-Use class-style component syntax? No
-Use Babel alongside TypeScript (required for modern mode, auto-detected polyfills, transpiling JSX)? No
-Pick a linter / formatter config: TSLint
-Pick additional lint features: (Press <space> to select, <a> to toggle all? In dedicated config files
-Save this as a preset for future projects? (y/N) N</p>
-<p>First, we will start of by creating a component called <code class="inline">Progress.vue</code> in <code class="inline">src/components</code>. Inside, add the folliwing minimal code:</p>
-<pre><code class="vue lang-vue language-vue"></code></pre>
+    <p>In this article, I’ll look at how you can replicate the circular progress scroller <a href="https://techcrunch.com/">Tech Crunch</a> use to gamify their articles, encouraging users to scroll to the end (and view the advertisement on the end of the article). </p>
+<p>This will be build using Vue, TypeScript and SVG. We will be separating the business logic (calculations related to scrolling and animation) from Vue entirely, though, so you could easily adapt this to your framework of choice. </p>
+<p>The source code is available <a href="https://github.com/lmiller1990/vue-scroll-progress">here</a> and a working demo <a href="https://lmiller1990.github.io/vue-scroll-progress/">here</a>.</p>
+<p>This article isn’t a typical “here’s the code, copy and paste it” guide - I’ll write a basic proof of concept first, and then refactor it, discussing some best practices I’ve learned building Vue apps and framework agnostic libraries over the years. Specifically, I’ll look at separating framework-agnostic logic (eg, business logic that doesn’t use any of Vue’s APIs) from framework specific code (eg, the parts of the app that reference <code class="inline">this</code>, referring to the Vue instance, or make use Vue’s reactivity system, such as computed properties).</p>
+<p>There is a lot of value in correctly separating the concerns; it allows you to easily integrate generic libraries to your framework of choice, makes unit testing easier, and keeps your components simple - Vue is a framework for building UIs, so most of the code in your components should be related to presenting data, not business logic.</p>
+<p>I’ll start of by making a new Vue app using the <code class="inline">vue-cli</code> with the following options: TyepeScript, Babel, no class component syntax.</p>
+<p>First, I’ll create a component called <code class="inline">Progress.vue</code> in <code class="inline">src/components</code>. Inside, add the following minimal code - the explanation follows.</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div&gt;
+    {{ percent }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import Vue from &#39;vue&#39;
+
+interface IMarkers {
+  progressStartMarker: HTMLElement | null
+  progressEndMarker: HTMLElement | null
+}
+
+interface IData extends IMarkers {
+  percent: number
+  scrollEvent: ((this: Window, ev: Event) =&gt; void) | null
+}
+
+export default Vue.extend({
+  name: &#39;Progress&#39;,  
+  
+  data(): IData {
+    return {
+      percent: 0,
+      scrollEvent: null,
+      progressStartMarker: null,
+      progressEndMarker: null,
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid red;
+  height: 50px;
+  width: 50px;
+  position: fixed;
+  right: 25px;
+}
+&lt;/style&gt;</code></pre>
+<p>The way this is going to work is the user will specify two <em>markers</em>. They start of as <code class="inline">null</code>. These indicate which two points we want to track scroll progress between. For now, they will just be HTML elements selected by <code class="inline">document.querySelector</code>, but you could allow the user to pass these as props as well. We will store the user’s scroll percentage in the <code class="inline">data</code> object.</p>
+<p>Now, add the following code to <code class="inline">App.vue</code>, which we will use to test the <code class="inline">&lt;Progress /&gt;</code> component.</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div id=&quot;app&quot;&gt;
+
+    &lt;Progress /&gt;
+
+    &lt;div
+      v-for=&quot;item in items.slice(0, 10)&quot;
+      :key=&quot;item&quot;
+      class=&quot;item&quot;
+    &gt;
+      {{ item }}
+    &lt;/div&gt;
+
+    &lt;div id=&quot;progress-marker-start&quot;&gt;&lt;/div&gt;
+
+    &lt;div
+      v-for=&quot;item in items.slice(10, 80)&quot;
+      :key=&quot;item&quot;
+      class=&quot;item&quot;
+    &gt;
+      {{ item }}
+    &lt;/div&gt;
+
+    &lt;div id=&quot;progress-marker-end&quot;&gt;&lt;/div&gt;
+
+    &lt;div
+      v-for=&quot;item in items.slice(80)&quot;
+      :key=&quot;item&quot;
+      class=&quot;item&quot;
+    &gt;
+      {{ item }}
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import Vue from &#39;vue&#39;
+
+import Progress from &#39;./components/Progress.vue&#39;
+
+interface IData {
+  items: string[]
+}
+
+export default Vue.extend({
+  name: &#39;app&#39;,
+
+  components: {
+    Progress,
+  },
+
+  data(): IData {
+    return {
+      items: [],
+    }
+  },
+
+  created() {
+    for (let i = 0; i &lt; 100; i++) {
+      this.items.push(`Item ${i}`)
+    }
+  },
+})
+&lt;/script&gt;
+
+&lt;style&gt;
+#app {
+  margin: 25px;
+}
+
+#progress-marker-start, #progress-marker-end {
+  border: 1px solid;
+}
+
+.item {
+  margin: 5px;
+  padding: 5px;
+}
+&lt;/style&gt;</code></pre>
+<p>A lot of boilerplate, but nothing very exciting yet. We render a bunch of <code class="inline">&lt;div /&gt;</code>. Then <code class="inline">&lt;div id=&quot;progress-marker-start&quot;&gt;&lt;/div&gt;</code> - this is the point we will start tracking the scroll progress. Next we have some more <code class="inline">&lt;div /&gt;</code>, and the end point, <code class="inline">&lt;div id=&quot;progress-marker-end&quot;&gt;&lt;/div&gt;</code>. </p>
+<p>This renders the following:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss1.png" alt=""/> </p>
+<p>For the proof of concept, we will simply display a % in the top right corner as the user scrolls. </p>
+<h2>Calculating the Marker Offsets</h2>
+<p>There are a few strategies to calculate how far a user has scrolled. The one I have found to cover all the edge cases and work correctly requires three pieces of information to calculate:</p>
+<ol>
+<li>The current position the users has scrolled to
+</li>
+<li>The y position of <code class="inline">progress-marker-start</code>, relative to the top of the viewport
+</li>
+<li>The y position of <code class="inline">progress-marker-end</code>, relative to the top of the viewport
+</li>
+</ol>
+<p>Getting the current scroll position is trivial - we can use <code class="inline">window.scrollY</code> and call it a day. The other two y positions are a bit more tricky. A part of any algorithm to calculate the position of a HTML element will almost always include <code class="inline">getBoundingClientRect()</code>. My strategy is no different. At first, my strategy was to calculate the positions as follows:</p>
+<pre><code class="js lang-js language-js">// start marker
+Math.abs(document.body.getBoundingClientRect().top - startMarker.getBoundingClientRect().top)
+
+// end marker
+Math.abs(document.body.getBoundingClientRect().top - endMarker.getBoundingClientRect().top)</code></pre>
+<p>This seemed fine, until you add some padding to the <code class="inline">&lt;div id=&quot;app&quot; /&gt;</code> element - then <code class="inline">document.body.getBoundingClientRect().top</code> ceases to accurately reflect the top of the document! The following image illustrates this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss2.png" alt=""/> </p>
+<p>You can see 25px are not accounted for, indicated by the red arrow. The way I solved this was using <code class="inline">document.documentElement.getBoundingClientRect().top</code>. <code class="inline">document.documentElement</code> refers the <code class="inline">&lt;html /&gt;</code> element, and <code class="inline">getBoundingClientRect().top</code> returns 0:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss3.png" alt=""/> </p>
+<p>This is working great for me so far, but it’s possible there are caveats to this method too (eg, if someone decided to add <code class="inline">margin</code> to the HTML, which is not something I’ve seen very often, if ever).</p>
+<p>With this knowledge, we can add a cute little method that will get the y offset for an element. Add a <code class="inline">methods</code> key with the following function in <code class="inline">Progress.vue</code>:</p>
+<pre><code class="ts lang-ts language-ts">methods: {
+  getPosRelativeToBody(el: HTMLElement): number {
+    return Math.abs(
+      document.documentElement.getBoundingClientRect().top - el.getBoundingClientRect().top
+    );
+  },
+}</code></pre>
+<h2>Calculating the Scroll Progress</h2>
+<p>I want to start counting scroll percentage not when the <code class="inline">&lt;div id=&quot;progress-marker-start&quot;&gt;&lt;/div&gt;</code> appears on screen, but when it disappears above the top of the viewport. So all we need do is taken the different in the y position of the <code class="inline">&lt;div id=&quot;progress-marker-start&quot;&gt;&lt;/div&gt;</code> and <code class="inline">&lt;div id=&quot;progress-marker-end&quot;&gt;&lt;/div&gt;</code> and subtract <code class="inline">window.innerHeight</code>. This will give us the total pixels we want to track the scroll progress over.</p>
+<pre><code class="ts lang-ts language-ts">const offsetFromTop = getPosRelativeToBody(startMarker)
+const total = getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight</code></pre>
+<p>Using the <code class="inline">App.vue</code> I defined, this works out to around 2011px.</p>
+<p>Finally, we can calculate the percentage progress by dividing the <code class="inline">window.scrollY - offsetFromTop</code> by the total. <code class="inline">window.scrollY - offsetFromTop</code> reflects the point when the start marker is above the top of the current viewport.</p>
+<pre><code class="ts lang-ts language-ts">const offsetFromTop = getPosRelativeToBody(startMarker)
+const total = getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight
+
+// get the progress as a percentage
+const progress = (((window.scrollY - offsetFromTop) / total) * 100)</code></pre>
+<p>Putting this all together, we get the following function. Add it to <code class="inline">Progress.vue</code> under <code class="inline">methods</code>:</p>
+<pre><code class="ts lang-ts language-ts">methods: {
+  // ...
+
+  getScrollPercentage(startMarker: HTMLElement, endMarker: HTMLElement): void {
+    const offsetFromTop = this.getPosRelativeToBody(startMarker)
+    const total = this.getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight
+    const progress = (((window.scrollY - offsetFromTop) / total) * 100)
+    this.percent = progress
+  }
+
+  // ...
+}</code></pre>
+<p>The last thing to do is to call this method when the user scrolls. This isn’t the final code - there are many improvements we will make - but the easiest way to test this is to add the event listener in a <code class="inline">mounted</code> hook in <code class="inline">Progress.vue</code>:</p>
+<pre><code class="ts lang-ts language-ts">mounted() {
+  this.progressStartMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-start&#39;)
+  this.progressEndMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-end&#39;)
+
+  if (!this.progressStartMarker || !this.progressEndMarker) {
+    throw Error(&#39;Progress markers not found&#39;)
+  }
+
+  window.addEventListener(&#39;scroll&#39;, () =&gt; {
+    this.getScrollPercentage(this.progressStartMarker!, this.progressEndMarker!)
+  })
+}</code></pre>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss3.5.png" alt=""/> </p>
+<p>It works! There are tons of improvements we will make, but this is a great proof of concept.</p>
+<p>The entire <code class="inline">&lt;script&gt;</code> tag of <code class="inline">Progress.vue</code> so far is as follows:</p>
+<pre><code class="ts lang-ts language-ts">import Vue from &#39;vue&#39;
+
+interface IMarkers {
+  progressStartMarker: HTMLElement | null
+  progressEndMarker: HTMLElement | null
+}
+
+interface IData extends IMarkers {
+  percent: number
+  scrollEvent: ((this: Window, ev: Event) =&gt; void) | null
+}
+
+export default Vue.extend({
+  name: &#39;Progress&#39;,  
+  
+  data(): IData {
+    return {
+      percent: 0,
+      scrollEvent: null,
+      progressStartMarker: null,
+      progressEndMarker: null,
+    }
+  },
+
+  mounted() {
+    this.progressStartMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-start&#39;)
+    this.progressEndMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-end&#39;)
+
+    if (!this.progressStartMarker || !this.progressEndMarker) {
+      throw Error(&#39;Progress markers not found&#39;)
+    }
+
+    window.addEventListener(&#39;scroll&#39;, () =&gt; {
+      this.getScrollPercentage(this.progressStartMarker!, this.progressEndMarker!)
+    })
+  },
+
+  methods: {
+    getScrollPercentage(startMarker: HTMLElement, endMarker: HTMLElement): void {
+      const offsetFromTop = this.getPosRelativeToBody(startMarker)
+      const total = this.getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight
+      const progress = (((window.scrollY - offsetFromTop) / total) * 100)
+      this.percent = progress
+    },
+
+    getPosRelativeToBody(el: HTMLElement): number {
+      return Math.abs(
+        document.documentElement.getBoundingClientRect().top - el.getBoundingClientRect().top,
+      );
+    },
+  }
+})</code></pre>
+<h2>Extract the Logic out of the Component</h2>
+<p>Before we add a nice UI like Tech Crunch has, we can decouple the scroll logic from the component. Currently, if someone wants to use our scroll progress component, they need to pull in all of Vue - not ideal, if you site is not already using Vue. None of the logic we have written even uses any of Vue’s API. </p>
+<p>Let’s extract the logic, and make <code class="inline">&lt;Progress /&gt;</code> a thin Vue wrapper connecting Vue and around the actual business logic. This gives us the option of releasing a framework-agonistic scroll progress library, which authors can then integrate to their Vue/React/Angular/whatever app. </p>
+<p>I’ll create a <code class="inline">progress.ts</code> script in the <code class="inline">components</code> directory, and add the functions discussed above, making slight changes to their signatures:</p>
+<pre><code class="ts lang-ts language-ts">const getScrollPercentage = (startMarker: HTMLElement, endMarker: HTMLElement): number =&gt; {
+  const offsetFromTop = getPosRelativeToBody(startMarker)
+  const total = getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight
+  const progress = (((window.scrollY - offsetFromTop) / total) * 100)
+  return progress
+}
+
+const getPosRelativeToBody = (el: HTMLElement): number =&gt; {
+  return Math.abs(
+    document.documentElement.getBoundingClientRect().top - el.getBoundingClientRect().top,
+  );
+}
+
+export {
+  getScrollPercentage
+}</code></pre>
+<p>Update <code class="inline">Progress.vue</code>. The <code class="inline">&lt;script&gt;</code> section of <code class="inline">&lt;Progress /&gt;</code> is now just a thin wrapper around the logic in <code class="inline">progress.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import Vue from &#39;vue&#39;
+
+import { getScrollPercentage } from &#39;./progress&#39;
+
+interface IData {
+  percent: number
+  scrollEvent: ((this: Window, ev: Event) =&gt; void) | null
+}
+
+export default Vue.extend({
+  name: &#39;Progress&#39;,  
+  
+  data(): IData {
+    return {
+      percent: 0,
+      scrollEvent: null,
+    }
+  },
+
+  mounted() {
+    const progressStartMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-start&#39;)
+    const progressEndMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-end&#39;)
+
+    if (!progressStartMarker || !progressEndMarker) {
+      throw Error(&#39;Progress markers not found&#39;)
+    }
+
+    window.addEventListener(&#39;scroll&#39;, () =&gt; {
+      this.percent = getScrollPercentage(progressStartMarker, progressEndMarker)
+    })
+  }
+})</code></pre>
+<p>Everything is still working! Let’s add a circle UI that fills out as the users scrolls, like the one on Tech Crunch.</p>
+<h2>Some SVG</h2>
+<p>Turns out you cannot make a incrementally filling circle like the one we want with CSS alone. Or, at least, it’s not the best tool for the job. That honor goes to SVG. Before integrating the SVG circle animation into the app, we need to understand a bit about SVG.</p>
+<p>A basic SVG circle is drawn as follows:</p>
+<pre><code class="html lang-html language-html">&lt;svg
+   class=&quot;progress&quot;
+   width=&quot;120&quot;
+   height=&quot;120&quot;
+&gt;
+  &lt;circle
+    stroke-width=&quot;4&quot;
+    stroke=&quot;red&quot;
+    r=&quot;50&quot;
+    cx=&quot;60&quot;
+    cy=&quot;60&quot;
+    fill=&quot;transparent&quot;
+  /&gt;
+&lt;/svg&gt;</code></pre>
+<p>This appears like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss4.png" alt=""/> </p>
+<p>The next property we are interested in is <code class="inline">stroke-dasharray</code>. You can read more about this one MDN, however the basic premise is you can draw the shape with dashes, instead of a solid border. Here are some examples:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss5.png" alt=""/> </p>
+<p>For our purpose, we want <code class="inline">stroke-dasharray</code> to equal the circumference of our circle. We can calculate this programmatically: 2 <em> Math.PI </em> radius (which we specified to be 50px). This works out to be 314px for our circle. The following snippets demonstrates this calculation:</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+document.addEventListener(&#39;DOMContentLoaded&#39;, () =&gt; {
+  const circle = document.querySelector(&#39;circle&#39;)
+  circle.style.strokeDasharray = circle.r.baseVal.value * Math.PI * 2
+})
+&lt;/script&gt;
+
+&lt;svg
+  class=&quot;progress&quot;
+  width=&quot;120&quot;
+  height=&quot;120&quot;
+&gt;
+  &lt;circle
+    stroke-width=&quot;4&quot;
+    stroke=&quot;red&quot;
+    r=&quot;50&quot;
+    cx=&quot;60&quot;
+    cy=&quot;60&quot;
+    fill=&quot;transparent&quot;
+  /&gt;
+&lt;/svg&gt;</code></pre>
+<p>Nothing looks different yet - still a red circle. However, now we can take advantage of another property, <code class="inline">stroke-dashoffset</code>. This sets the offset (from where the dash is drawn). Currently our circle is comprised of a single large dash, set using <code class="inline">stroke-dasharray</code>, that is the full circumference of the circle. Let’s try some different numbers for <code class="inline">stroke-dasharray</code> and see how things change:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss6.png" alt=""/> </p>
+<p>As the stroke-dashoffset gets larger, the red circle is smaller! As it increases in size, the red border is almost entirely gone. So when the user has scrolled 0% of the area we are measuring, we want the <code class="inline">stroke-dashoffset</code> to be (circumference * progress), where progress is between 0 and 1. For example:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss7.png" alt=""/> </p>
+<p>Close, but not quite. This offsets the circle by 25%, drawing the remaining 75%. We actually want the other way around - only to draw 25%. So our calculation becomes (circumference - (circumference * progress)):</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vue-scroll-progress/master/images/ss8.png" alt=""/> </p>
+<p>Looks good!</p>
+<h2>Integrating the SVG Circle and with Logic</h2>
+<p>Now we can have all the pieces need to draw circle as we scroll: the percentage change, and an SVG we can update with JavaScript. Let’s do it. Update the <code class="inline">&lt;template&gt;</code> section of <code class="inline">Progress.vue</code></p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;svg
+    class=&quot;progress&quot;
+    width=&quot;120&quot;
+    height=&quot;120&quot;
+  &gt;
+    &lt;circle
+      stroke-width=&quot;0&quot;
+      stroke=&quot;red&quot;
+      r=&quot;50&quot;
+      cx=&quot;60&quot;
+      cy=&quot;60&quot;
+      fill=&quot;transparent&quot;
+    /&gt;
+  &lt;/svg&gt;
+&lt;/template&gt;</code></pre>
+<p>Next, update the <code class="inline">&lt;style&gt;</code> tag. It is a lot more simple now - we do most of the styling in the SVG now.</p>
+<pre><code class="html lang-html language-html">&lt;style scoped&gt;
+svg {
+  position: fixed;
+  right: 25px;
+}
+&lt;/style&gt;</code></pre>
+<p>Next, we have an update to <code class="inline">progress.ts</code>. I added an <code class="inline">updateCircle</code> function, which implements the calculation discussed above, and cover a few edge cases. I also made some small changes to <code class="inline">getScrollPercentage</code>. The now completed <code class="inline">progress.ts</code> file looks like this:</p>
+<pre><code class="ts lang-ts language-ts">const getScrollPercentage = (startMarker: HTMLElement, endMarker: HTMLElement): number =&gt; {
+  const offsetFromTop = getPosRelativeToBody(startMarker)
+  const total = getPosRelativeToBody(endMarker) - offsetFromTop - window.innerHeight
+  const progress = ((window.scrollY - offsetFromTop) / total)
+  return progress
+}
+
+const updateCircle = (circle: SVGCircleElement, progress: number): void =&gt; {
+  const circumference = circle.r.baseVal.value * 2 * Math.PI
+
+  // draw nothing
+  if (progress &lt; 0) {
+    circle.style.strokeDashoffset = `${circumference}`
+    return
+  }
+
+  // draw the full circle
+  if (progress &gt; 1) {
+    circle.style.strokeDashoffset = &#39;0&#39;
+    return
+  }
+
+  circle.style.strokeWidth = &#39;4&#39;
+  circle.style.strokeDasharray = `${circumference}`
+  const offset = circumference - (circumference * progress)
+  circle.style.strokeDashoffset = `${offset}`
+}
+
+const getPosRelativeToBody = (el: HTMLElement): number =&gt; {
+  return Math.abs(
+    document.documentElement.getBoundingClientRect().top - el.getBoundingClientRect().top,
+  );
+}
+
+export {
+  getScrollPercentage,
+  updateCircle,
+}</code></pre>
+<p>Lastly, let’s use the <code class="inline">updateCircle</code> function. Update the <code class="inline">&lt;script&gt;</code> section of <code class="inline">Progress.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;script lang=&quot;ts&quot;&gt;
+import Vue from &#39;vue&#39;
+
+import { getScrollPercentage, updateCircle } from &#39;./progress&#39;
+
+interface IData {
+  percent: number
+  scrollEvent: ((this: Window, ev: Event) =&gt; void) | null
+}
+
+export default Vue.extend({
+  name: &#39;Progress&#39;,  
+  
+  data(): IData {
+    return {
+      percent: 0,
+      scrollEvent: null,
+    }
+  },
+
+  mounted() {
+    const circle = this.$el.querySelector&lt;SVGCircleElement&gt;(&quot;circle&quot;)
+    const progressStartMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-start&#39;)
+    const progressEndMarker = document.querySelector&lt;HTMLElement&gt;(&#39;#progress-marker-end&#39;)
+
+    if (!progressStartMarker || !progressEndMarker || !circle) {
+      throw Error(&#39;Progress markers not found&#39;)
+    }
+
+    window.addEventListener(&#39;scroll&#39;, () =&gt; {
+      const percent = getScrollPercentage(progressStartMarker, progressEndMarker)
+      updateCircle(circle, percent)
+    })
+  },
+
+  destroyed() {
+    if (!this.scrollEvent) {
+      return
+    }
+
+    window.removeEventListener(&#39;scroll&#39;, this.scrollEvent)
+  },
+})
+&lt;/script&gt;</code></pre>
+<p>I added a call to <code class="inline">updateCircle</code> in the <code class="inline">scroll</code> event listener’s callback. I also remove the event listener on <code class="inline">destroyed</code> to avoid a potential memory leak.</p>
+<h2>One Last Improvement - requestAnimationFrame</h2>
+<p>We can add one last mini improvement - only call <code class="inline">getScrollPercentage</code> and <code class="inline">updateCircle</code> when the browser redraws the screen, using <code class="inline">requestAnimationFrame</code>. Update the code in <code class="inline">mounted</code>:</p>
+<pre><code class="ts lang-ts language-ts">window.addEventListener(&#39;scroll&#39;, () =&gt; {
+  requestAnimationFrame(() =&gt; {
+    const percent = getScrollPercentage(progressStartMarker, progressEndMarker)
+    updateCircle(circle, percent)
+  })
+})</code></pre>
+<p>To learn why this is a good to do, research <code class="inline">requestAnimationFrame</code> and passive event listeners - there is a lot of information out there. There are other improvements and optimizations that I might write about in a future article.</p>
+<h2>Conclusion</h2>
+<p>This article covered:</p>
+<ul>
+<li>some caveats of <code class="inline">getClientBoundingRect</code>
+</li>
+<li>using Vue as a thin wrapper around your business logic
+</li>
+<li>basic SVG
+</li>
+</ul>
+<p>The source code is available <a href="https://github.com/lmiller1990/vue-scroll-progress">here</a> and a working demo <a href="https://lmiller1990.github.io/vue-scroll-progress/">here</a>.</p>
 
   </div>
 </body>
