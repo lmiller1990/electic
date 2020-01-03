@@ -6,16 +6,19 @@ body {
   align-items: center;
 }
 
+.title, .post_body {
+  max-width: 760px;
+}
+
 .title {
-  max-width: 960px;
   text-align: center;
 }
 
 .post_body {
-  max-width: 960px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  line-height: 1.5;
 }
 
 li, ol, ul, h1, h2, h3, p, pre {
