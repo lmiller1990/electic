@@ -2,13 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title></title>
+  <title>Lachlan's Blog</title>
 </head>
 <link rel="stylesheet" href="index.css">
 <body>
   <section>
+    <br />
+    <p>
+      Hi, I'm Lachlan. I'm a full-stack developer who specializes in Vue.js, React.js, and TypeScript. I'm passionate about testing and mentoring. I am located in Brisbane, Australia.
+    </p>
+
+    <p>
+      You may have seen my posts on <a href="https://medium.com/@lachlanmiller_52885">Medium</a>, or my open source book, the <a href="https://lmiller1990.github.io/vue-testing-handbook/">Vue Testing Handbook</a>. I'm also a maintainer of <a href="https://github.com/vuejs/vue-test-utils">Vue Test Utils</a>.
+    </p>
+
+    <p>
+      You can find me on <a href="https://github.com/lmiller1990">GitHub</a>, which also has my contact information if you want to talk to me. My resume is <a href="https://lmiller1990.github.io/">here</a>. I occasionally post on <a href="https://twitter.com/Lachlan19900">Twitter</a>, too.
+    </p>
+
+    <h3>Blog Articles</h3>
+
     <%= for post <- posts do %>
-      <a href="<%= post.link %>">
+      <a href="<%= post.link %>" class="is-post">
         <%= post.title%>
       </a>
 

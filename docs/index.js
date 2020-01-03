@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const titles = document.querySelectorAll('a')
+  const titles = document.querySelectorAll('a.is-post')
 
   for (const title of titles) {
     const titleText = title.text.trim()
