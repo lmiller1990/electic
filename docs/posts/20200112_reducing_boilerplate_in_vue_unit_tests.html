@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200112 Reducing Boilerplate in Vue Unit Tests
+  </h1>
+
+  <div class="post_body">
+    <p>Reducing boilerplate in your unit tests can improve readability. In this article, we refactor the unit tests for a component using Vuex and VueRouter, and extract a useful utility function that can be used throughout the entire codebase.</p>
+<p>It is often ideal to start each unit test with a fresh copy of a component. Furthermore, as your apps get larger and more complex, chances are you have a some components with many different props, and possibly a number of third party libraries such as Vuetify, VueRouter and Vuex installed. This can cause your tests to have lots of boilerplate code - that is, code that is not directly related to the test.</p>
+<blockquote><p>This article is available as a screencast on <a href="https://vuejs-course.com/screencasts/reducing-duplication-in-tests.html?ref=electic">Vue.js Courses</a>. Check it out <a href="https://vuejs-course.com/screencasts/reducing-duplication-in-tests.html?ref=electic">here</a>.</p>
+</blockquote>
+<p>The source code for the test described on this page can be found <a href="https://github.com/lmiller1990/vue-testing-handbook/tree/master/demo-app/tests/unit/Posts.spec.js">here</a>.</p>
+<h2>The Posts Component</h2>
+<p>This is the component we will be testing. It shows a <code class="inline">message</code> prop, if one is received. It shows a New Post button if the user is authenticated and some posts. Both of the <code class="inline">authenticated</code> and <code class="inline">posts</code> objects come from the Vuex store. Finally, it renders are <code class="inline">router-link</code> component, showing a link to a post.</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;
+    &lt;div id=&quot;message&quot; v-if=&quot;message&quot;&gt;{{ message }}&lt;/div&gt;
+
+    &lt;div v-if=&quot;authenticated&quot;&gt;
+      &lt;router-link 
+        class=&quot;new-post&quot; 
+        to=&quot;/posts/new&quot;
+      &gt;
+        New Post
+      &lt;/router-link&gt;
+    &lt;/div&gt;
+
+    &lt;h1&gt;Posts&lt;/h1&gt;
+    &lt;div 
+      v-for=&quot;post in posts&quot; 
+      :key=&quot;post.id&quot; 
+      class=&quot;post&quot;
+    &gt;
+      &lt;router-link :to=&quot;postLink(post.id)&quot;&gt;
+        {{ post.title }}
+      &lt;/router-link&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  name: &#39;Posts&#39;,
+  props: {
+    message: String,
+  },
+
+  computed: {
+    authenticated() {
+      return this.$store.state.authenticated
+    },
+
+    posts() {
+      return this.$store.state.posts
+    }
+  },
+
+  methods: {
+    postLink(id) {
+      return `/posts/${id}`
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>We want to test:</p>
+<ul>
+<li>is the <code class="inline">message</code> rendered when a prop is received?
+</li>
+<li>are the <code class="inline">posts</code> correctly rendered?
+</li>
+<li>is the New Post button shown when <code class="inline">authenticated</code> is <code class="inline">true</code>, hidden when <code class="inline">false</code>?
+</li>
+</ul>
+<p>Ideally, the tests should be as concise as possible.</p>
+<h2>Vuex/VueRouter Factory Functions</h2>
+<p>One good step you can take to making apps more testable is export factory functions for Vuex and VueRouter. Often, you will see something like:</p>
+<pre><code class="js lang-js language-js">// store.js
+
+export default new Vuex.Store({ ... })
+
+// router.js
+export default new VueRouter({ ... })</code></pre>
+<p>This is fine for a regular application, but not ideal for testing. If you do this, every time you use the store or router in a test, it will be shared across every other test that also imports it. Ideally, every component should get a fresh copy of the store and router.</p>
+<p>One easy way to work around this is by exporting a factory function - a function that returns a new instance of an object. For example:</p>
+<pre><code class="js lang-js language-js">// store.js
+export const store = new Vuex.Store({ ... })
+export const createStore = () =&gt; {
+  return new Vuex.Store({ ... })
+}
+
+// router.js
+export default new VueRouter({ ... })
+export const createRouter = () =&gt; {
+  return new Vuex.Router({ ... })
+}</code></pre>
+<p>Now your main app can do <code class="inline">import { store } from &#39;./store.js</code>, and your tests can get a new copy of the store each time by doing <code class="inline">import { createStore } from &#39;./store.js</code>, then creating and instance with <code class="inline">const store = createStore()</code>. The same goes for the router. This is what I am doing in the <code class="inline">Posts.vue</code> example - the store code is found <a href="https://github.com/lmiller1990/vue-testing-handbook/tree/master/demo-app/src/createStore.js">here</a> and the router <a href="https://github.com/lmiller1990/vue-testing-handbook/tree/master/demo-app/src/createRouter.js">here</a>.</p>
+<h2>The Tests (before refactor)</h2>
+<p>Now we know what <code class="inline">Posts.vue</code> and the store and router look like, we can understand what the tests are doing:</p>
+<pre><code class="js lang-js language-js">import Vuex from &#39;vuex&#39;
+import VueRouter from &#39;vue-router&#39;
+import { mount, createLocalVue } from &#39;@vue/test-utils&#39;
+
+import Posts from &#39;@/components/Posts.vue&#39;
+import { createRouter } from &#39;@/createRouter&#39;
+import { createStore } from &#39;@/createStore&#39;
+
+describe(&#39;Posts.vue&#39;, () =&gt; {
+  it(&#39;renders a message if passed&#39;, () =&gt; {
+    const localVue = createLocalVue()
+    localVue.use(VueRouter)
+    localVue.use(Vuex)
+
+    const store = createStore()
+    const router = createRouter()
+    const message = &#39;New content coming soon!&#39;
+    const wrapper = mount(Posts, {
+      propsData: { message },
+      store, router,
+    })
+
+    expect(wrapper.find(&quot;#message&quot;).text()).toBe(&#39;New content coming soon!&#39;)
+  })
+
+  it(&#39;renders posts&#39;, async () =&gt; {
+    const localVue = createLocalVue()
+    localVue.use(VueRouter)
+    localVue.use(Vuex)
+
+    const store = createStore()
+    const router = createRouter()
+    const message = &#39;New content coming soon!&#39;
+
+    const wrapper = mount(Posts, {
+      propsData: { message },
+      store, router,
+    })
+
+    wrapper.vm.$store.commit(&#39;ADD_POSTS&#39;, [{ id: 1, title: &#39;Post&#39; }])
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll(&#39;.post&#39;).length).toBe(1)
+  })
+})</code></pre>
+<p>This does not fully tests all the conditions; it’s a minimal example, and enough to get us started. Notice the duplication and repetition - let’s get rid of that.</p>
+<h2>A Custom <code class="inline">createTestVue</code> Function</h2>
+<p>The first five line of each test are the same:</p>
+<pre><code class="js lang-js language-js">const localVue = createLocalVue()
+localVue.use(VueRouter)
+localVue.use(Vuex)
+
+const store = createStore()
+const router = createRouter()</code></pre>
+<p>Let’s fix that. As not to be confused with Vue Test Utils’ <code class="inline">createLocalVue</code> function, I like to call my function <code class="inline">createTestVue</code>. It looks something like this:</p>
+<pre><code class="js lang-js language-js">const createTestVue = () =&gt; {
+  const localVue = createLocalVue()
+  localVue.use(VueRouter)
+  localVue.use(Vuex)
+
+  const store = createStore()
+  const router = createRouter()
+  return { store, router, localVue }
+}</code></pre>
+<p>Now we have encapsulated all the logic in a single function. We return the <code class="inline">store</code>, <code class="inline">router</code> and <code class="inline">localVue</code> since we need to pass them to the <code class="inline">mount</code> function. </p>
+<p>If we refactor the first test using <code class="inline">createTestVue</code>, it looks like this:</p>
+<pre><code class="js lang-js language-js">it(&#39;renders a message if passed&#39;, () =&gt; {
+  const { localVue, store, router } = createTestVue()
+  const message = &#39;New content coming soon!&#39;
+  const wrapper = mount(Posts, {
+    propsData: { message },
+    store,
+    router,
+    localVue
+  })
+
+  expect(wrapper.find(&quot;#message&quot;).text()).toBe(&#39;New content coming soon!&#39;)
+})</code></pre>
+<p>Quite a bit more concise. Let’s refactor second test, which makes use of the of Vuex store.</p>
+<pre><code class="js lang-js language-js">it(&#39;renders posts&#39;, async () =&gt; {
+  const { localVue, store, router } = createTestVue()
+  const wrapper = mount(Posts, {
+    store,
+    router,
+  })
+
+  wrapper.vm.$store.commit(&#39;ADD_POSTS&#39;, [{ id: 1, title: &#39;Post&#39; }])
+  await wrapper.vm.$nextTick()
+
+  expect(wrapper.findAll(&#39;.post&#39;).length).toBe(1)
+})</code></pre>
+<h2>Defining a <code class="inline">createWrapper</code> method</h2>
+<p>While the above code is definitely an improvement, comparing this and the previous test, we can notice that about half of the code is still duplicated. Let’s create a new method, <code class="inline">createWrapper</code>, to address this.</p>
+<pre><code class="js lang-js language-js">const createWrapper = (component, options = {}) =&gt; {
+  const { localVue, store, router } = createTestVue()
+  return mount(component, {
+    store,
+    router,
+    localVue,
+    ...options
+  })
+}</code></pre>
+<p>Now we can just called <code class="inline">createWrapper</code> and have a fresh copy of the component, ready for testing. Our tests are very concise now.</p>
+<pre><code class="js lang-js language-js">it(&#39;renders a message if passed&#39;, () =&gt; {
+  const message = &#39;New content coming soon!&#39;
+  const wrapper = createWrapper(Posts, {
+    propsData: { message },
+  })
+
+  expect(wrapper.find(&quot;#message&quot;).text()).toBe(&#39;New content coming soon!&#39;)
+})
+
+it(&#39;renders posts&#39;, async () =&gt; {
+  const wrapper = createWrapper(Posts)
+
+  wrapper.vm.$store.commit(&#39;ADD_POSTS&#39;, [{ id: 1, title: &#39;Post&#39; }])
+  await wrapper.vm.$nextTick()
+
+  expect(wrapper.findAll(&#39;.post&#39;).length).toBe(1)
+})</code></pre>
+<h2>Setting the Initial Vuex State</h2>
+<p>The last improvement we can make is to how we populate the Vuex store. In a real application, you store is likely to be complex, and having to <code class="inline">commit</code> and <code class="inline">dispatch</code> many different mutations and actions to get your component into the state you want to test is not ideal. We can make a small change to our <code class="inline">createStore</code> function, which makes it easier to set the initial state:</p>
+<pre><code class="js lang-js language-js">const createStore = (initialState = {}) =&gt; new Vuex.Store({
+  state: {
+    authenticated: false,
+    posts: [],
+    ...initialState
+  },
+  mutations: {
+    // ...
+  }
+})</code></pre>
+<p>Now we can the desired initial state to the <code class="inline">createStore</code> function. We can do a quick refactor, merging <code class="inline">createTestVue</code> and <code class="inline">createWrapper</code>:</p>
+<pre><code class="js lang-js language-js">const createWrapper = (component, options = {}, storeState = {}) =&gt; {
+  const localVue = createLocalVue()
+  localVue.use(VueRouter)
+  localVue.use(Vuex)
+  const store = createStore(storeState)
+  const router = createRouter()
+
+  return mount(component, {
+    store,
+    router,
+    localVue,
+    ...options
+  })
+}</code></pre>
+<p>Now our test now can be written as follows:</p>
+<pre><code class="js lang-js language-js">it(&#39;renders posts&#39;, async () =&gt; {
+  const wrapper = createWrapper(Posts, {}, {
+    posts: [{ id: 1, title: &#39;Post&#39; }]
+  })
+
+  expect(wrapper.findAll(&#39;.post&#39;).length).toBe(1)
+})</code></pre>
+<p>This is a big improvement! We went from a test where roughly half the code was boilerplate, and not actually related to the assertion, to two lines; one to prepare the component for testing, and one for the assertion. </p>
+<p>Another bonus of this refactor is we have a flexible <code class="inline">createWrapper</code> function, which we can use for all our tests.</p>
+<h2>Improvements</h2>
+<p>There are some other potential improvements:</p>
+<ul>
+<li>update the <code class="inline">createStore</code> function to allow setting initial state for Vuex namespaced modules
+</li>
+<li>improve <code class="inline">createRouter</code> to set a specific route
+</li>
+<li>allow the user to pass a <code class="inline">shallow</code> or <code class="inline">mount</code> argument to <code class="inline">createWrapper</code> 
+</li>
+</ul>
+<h2>Conclusion</h2>
+<p>This guide discussed:</p>
+<ul>
+<li>using factory functions to get a new instance of an object
+</li>
+<li>reducing boilerplate and duplication by extract common behavior
+</li>
+</ul>
+<p>The source code for the test described on this page can be found <a href="https://github.com/lmiller1990/vue-testing-handbook/tree/master/demo-app/tests/unit/Posts.spec.js">here</a>. It is also available as a screencast on <a href="https://vuejs-course.com/screencasts/reducing-duplication-in-tests.html?ref=electic">Vue.js Courses</a>.</p>
+
+  </div>
+</body>
+</html>
