@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200119 Separating UI and Business Logic in Vue Components
+  </h1>
+
+  <div class="post_body">
+    <p>One common occurrence I’ve observed across large Vue and React apps is that, over time, the UI logic and business logic becomes so entangled that UI changes break the business logic and vice versa. Let’s look at an example of this, and how we can separate the concerns.</p>
+<p>Mixed concerns also means the application has poor test coverage - unit tests often force you to keep your business logic and UI logic separate, and not doing so makes testing difficult. Tests aside, Vue and React are for building user interfaces, not encapsulating application logic, so there is a lot of value in keeping the two separate.</p>
+<p>In this article, I will discuss separating business logic and UI logic by refactoring a password strength component posted by Milad Dehghan. You can see the original source code on his GitHub <a href="https://github.com/miladd3/vue-simple-password-meter">here</a>. You can try it out <a href="https://miladd3.github.io/vue-simple-password-meter/">here</a>.</p>
+<p>A basic summary of how the component works is like this:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div class=&quot;po-password-strength-bar&quot; :class=&quot;passwordClass&quot;&gt;&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  props: {
+    password: {
+      type: String,
+      required: true
+    }
+  },
+  computed: {
+    passwordStrength() {
+      if (this.password) {
+        return this.checkPassword(this.password)
+      }
+    },
+
+    passwordClass() {
+      return [
+        { scored: this.passwordStrength &amp;&amp; this.password },
+        {
+          risky: this.passwordStrength === 0,
+          // ...
+          secure: this.passwordStrength === 4
+        }
+      ]
+    }
+  },
+  methods: {
+    checkPassword(pass) {
+      // logic based on characters/length/numbers
+      // returns a number between 0 - 4
+      // 0 is the weakest, 4 is the strongest
+    }
+  }
+}
+&lt;/script&gt;
+
+&lt;style&gt;
+.po-password-strength-bar.risky {
+  background-color: #f95e68;
+}
+
+/* ... other styles */
+
+.po-password-strength-bar.secure {
+  background-color: #35cc62;
+}
+&lt;/style&gt;</code></pre>
+<p>The <code class="inline">passwordClass</code> computed is a UI concern - depending on the number returned from <code class="inline">passwordStrength</code> computed property, a different <code class="inline">class</code> is returned and the relevant styling applied. <code class="inline">passwordStrength</code> is what would be a private method if JavaScript had private methods - it’s basically a utility function that connects the UI and the main business logic, contained in <code class="inline">checkPassword</code>. </p>
+<p><code class="inline">checkPassword</code> encapsulates all the business logic. It defines a number of regular expressions and applies them to the <code class="inline">password</code> prop. Depending on how many regular expressions match <code class="inline">password</code>, a different value between - 0 and 4 is calculated. If we decided we wanted to something a bit more robust, like <a href="https://github.com/dropbox/zxcvbn"><code class="inline">zxcvbn</code></a>, we would make the change in this method.</p>
+<h2>Planned Improvements/Refactors</h2>
+<p>The component currently works fine, and has no obvious problems. However, if I wanted to start using the component in production, there are some changes I’d like to make to give me confidence moving forward. Other than moving to a more robust password strength estimation algorithm. The improvements I’ll investigate are:</p>
+<ul>
+<li>tests!
+</li>
+<li>separating the UI and business logic
+</li>
+</ul>
+<p>Separating the business logic will make it very easy to accomplish my other goal of moving to a more secure password strength estimation algorithm.</p>
+<h2>Writing a Regression Test</h2>
+<p>Before embarking on any refactor, I always write some basic regression tests. I want to make sure my changes do not break the existing functionality. I’ll start by writing a test around the two extreme cases - an insecure password (score of 0, also known as “risky”) and a secure password, with a score of 4.</p>
+<pre><code class="js lang-js language-js">import { shallowMount } from &#39;@vue/test-utils&#39;
+import SimplePassword from &#39;@/SimplePassword.vue&#39;
+
+const riskyPassword = &#39;abcdef&#39;
+const securePassword = &#39;abc123ABC?!&#39;
+
+test(&#39;SimplePassword with a risky password&#39;, () =&gt; {
+  const wrapper = shallowMount(SimplePassword, {
+    propsData: {
+      password: riskyPassword
+    }
+  })
+  expect(wrapper.classes()).toContain(&#39;risky&#39;)
+})
+
+test(&#39;SimplePassword with a secure password&#39;, () =&gt; {
+  const wrapper = shallowMount(SimplePassword, {
+    propsData: {
+      password: securePassword
+    }
+  })
+  expect(wrapper.classes()).toContain(&#39;secure&#39;)
+})</code></pre>
+<h2>Defining the <code class="inline">checkPassword</code> Interface</h2>
+<p>I want to have a minimal public interface that the <code class="inline">SimplePassword</code> component consumes. Specifically, I don’t want <code class="inline">SimplePassword</code> to know about things like scoring systems - just the result: <code class="inline">risky</code>, <code class="inline">guessable</code>, <code class="inline">secure</code> etc. Since I’ll be using TDD for this refactor, I’m going to write the test first. I’m only doing the two extreme cases for brevity, in a real system I would test all the cases.</p>
+<pre><code class="js lang-js language-js">describe(&#39;checkPassword&#39;, () =&gt; {
+  it(&#39;is a risky password&#39;, () =&gt; {
+    const actual = checkPassword(riskyPassword)
+    expect(actual).toBe(&#39;risky&#39;)
+  })
+
+  it(&#39;is a secure password&#39;, () =&gt; {
+    const actual = checkPassword(securePassword)
+    expect(actual).toBe(&#39;secure&#39;)
+  })
+})</code></pre>
+<p>Of course this is failing, the test does not have access to a <code class="inline">checkPassword</code> method at all, so it fails with <code class="inline">ReferenceError: checkPassword is not defined</code>. I’m going to create a <code class="inline">logic.js</code> file on the same level as <code class="inline">SimplePassword.vue</code> and move the <code class="inline">checkPassword</code> method from <code class="inline">SimplePassword.vue</code> to <code class="inline">logic.js</code>.</p>
+<pre><code class="js lang-js language-js">export function checkPassword(pass) {
+  // ... a bunch of variable declarations ... 
+
+  if (pass.length &gt; 4) {
+    if ((hasLowerCase || hasUpperCase) &amp;&amp; hasNumber) {
+      numCharMix = 1;
+    }
+
+    if (hasUpperCase &amp;&amp; hasLowerCase) {
+      caseMix = 1;
+    }
+
+    if ((hasLowerCase || hasUpperCase || hasNumber) &amp;&amp; hasSpecialChar) {
+      specialChar = 1;
+    }
+
+    if (pass.length &gt; 8) {
+      length = 1;
+    }
+
+    if (pass.length &gt; 12 &amp;&amp; !hasRepeatChars) {
+      length = 2;
+    }
+
+    if (pass.length &gt; 25 &amp;&amp; !hasRepeatChars) {
+      length = 3;
+    }
+
+    score = length + specialChar + caseMix + numCharMix;
+
+    if (score &gt; 4) {
+      score = 4;
+    }
+  }
+
+  return score;
+}</code></pre>
+<p>Now everything is failing, since <code class="inline">SimplePassword.vue</code> does not have a <code class="inline">checkPassword</code> method anymore. Let’s update it:</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+import { checkPassword } from &#39;./logic&#39;
+
+export default {
+  name: &quot;password-meter&quot;,
+  props: {
+    password: String
+  },
+  computed: {
+    passwordStrength() {
+      if (this.password) return checkPassword(this.password);
+      return null;
+    },
+    passwordClass() {
+      // ... omitted
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>I really like this refactor so far. The only change I made to <code class="inline">SimplePassword.vue</code> is:</p>
+<pre><code class="js lang-js language-js">// import this
+import { checkPassword } from &#39;./logic&#39;
+
+passwordStrength() {
+  // change `this.checkPassword` to `checkPassword`
+  if (this.password) return checkPassword(this.password);
+  return null;
+}</code></pre>
+<p>While it does not seem like much, this is already a big win. <code class="inline">checkPassword</code> is easier to test. Also, the change in <code class="inline">this.checkPassword</code> to <code class="inline">checkPassword</code> reflects the decoupling between business logic and UI logic. <code class="inline">this</code> refers to the Vue instance or component - so anything attached to <code class="inline">this</code> <strong>should be related to your UI</strong>. </p>
+<blockquote><p>Anything attached to <code class="inline">this</code> <strong>should be related to your UI</strong>.</p>
+</blockquote>
+<p><code class="inline">checkPassword</code> is also a pure function - no global variables of references to <code class="inline">this</code>, which means it’s output is deterministic, based entirely on it’s inputs. This is great for testing, and just feels generally great.</p>
+<h2>Updating the <code class="inline">checkPassword</code> interface</h2>
+<p>Updating the test with <code class="inline">import { checkPassword } from &#39;@/logic&#39;</code> gives us this error:</p>
+<pre><code class=" lang- language-">Expected: &quot;risky&quot;
+  Received: 0
+
+Expected: &quot;secure&quot;
+  Received: 4</code></pre>
+<p>Let’s go ahead and update <code class="inline">checkPassword</code> to get the tests passing. The minimal change is to move the <code class="inline">passwordClass</code> from a <code class="inline">computed</code> into <code class="inline">logic.js</code>.</p>
+<pre><code class="js lang-js language-js">function passwordClass(passwordStrength) {
+  if (passwordStrength === 0) {
+    return &#39;risky&#39;
+  }
+
+  // ... others omitted for brevity ...
+
+  if (passwordStrength === 4) {
+    return &#39;secure&#39;
+  }
+}</code></pre>
+<p>Notice we are not <code class="inline">exporting</code> the <code class="inline">passwordClass</code> function - this reflects what I stated earlier, that <code class="inline">passwordClass</code> is the equivalent of a <code class="inline">private</code> function in a language that supports that feature. </p>
+<p>Now we can update the <code class="inline">return</code> statement in <code class="inline">checkPassword</code> to use the new <code class="inline">passwordClass</code> method to get the <code class="inline">checkPassword</code> tests to pass</p>
+<pre><code class="js lang-js language-js">export function checkPassword(pass) {
+  // ... implementation ...
+  return passwordClass(score);
+}</code></pre>
+<p>Now the <code class="inline">checkPassword</code> tests are passing. The component tests are failing, though. Let’s fix that!</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+import { checkPassword } from &#39;./logic&#39;
+
+export default {
+  // ...
+  computed: {
+    passwordClass() {
+      if (this.password) {
+        const className = checkPassword(this.password);
+
+        return {
+          [className]: true,
+          scored: true
+        }
+      }
+    }
+  }
+};
+&lt;/script&gt;</code></pre>
+<p>Now all the tests are passing.</p>
+<p>We no longer have <code class="inline">passwordStrength</code> and <code class="inline">passwordClass</code>, or a bunch of <code class="inline">if</code> statements, since <code class="inline">checkPassword</code> defines a clean interface and encapsulates all the business logic. I really like this - <code class="inline">checkPassword</code> is very easy to test now, and the only code in the <code class="inline">script</code> tag of <code class="inline">SimplePassword</code> is directly related to the UI. It’s also easy to switch out the password strength algorithm, - since we have the unit tests, I’ll know immediately if I broke something.</p>
+<p>There is also a nice symmetry in our tests - we have two tests using <code class="inline">render</code> which only make assertions against the CSS classes, and a number of tests around our business logic, which do not touch have knowledge of the <code class="inline">SimplePassword</code> UI concern.</p>
+<h2>Conclusion</h2>
+<p>There are some other stylist improvements I’d like to make, but are mostly personal preference. We can be confident in making them, since we have decent test coverage. Separating the business logic and UI logic made the <code class="inline">SimplePassword</code> more understandable, and allowed us to improve test coverage. It also hid some of the implementation details, mimicing JavaScript’s non existance <code class="inline">private</code> keyword.</p>
+<p>There is a lot of value in separating UI and application logic; testability and readabilty for starters, and very little downside. Although it requires more thought up front, you end up with a better design and more maintainable codebase.</p>
+
+  </div>
+</body>
+</html>
