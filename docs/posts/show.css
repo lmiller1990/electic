@@ -7,7 +7,7 @@ body {
 }
 
 .title, .post_body {
-  max-width: 760px;
+  max-width: 600px;
 }
 
 .title {
