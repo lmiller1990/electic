@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200126 A Vuex Clone for Vue 3 From Scratch
+  </h1>
+
+  <div class="post_body">
+    <p>Vue 3’s alpha has been out for a while now, however most of the core libraries have not caught up yet - namely Vuex and Vue Router. Vuex, in particular, is fairly simple to implement with the new APIs exposed by Vue, namely <code class="inline">reactive</code> and <code class="inline">computed</code>. In this article, we will build a Vuex replacement (let’s called it Hackex). </p>
+<p>To keep things simple, we will only implement root level <code class="inline">state</code>, <code class="inline">actions</code>, <code class="inline">getters</code> and <code class="inline">mutations</code> - no namespaced <code class="inline">modules</code> for now, although I’ll provide a hint on how to accomplish that as well. </p>
+<p>The source code and tests in this article can be found <a href="https://gist.github.com/lmiller1990/a6afeef04cec494cee4abb6ec3c305bb">here</a>.</p>
+<h2>Specification</h2>
+<p>We will write the code to enable the following:</p>
+<pre><code class="js lang-js language-js">const store = new Vuex.Store({
+  state: {
+    count: 0
+  },
+  mutations: {
+    INCREMENT(state, payload) {
+      state.count += payload
+    }
+  },
+  actions: {
+    increment(context, payload) {
+      context.commit(&#39;INCREMENT&#39;, payload)
+    }
+  },
+  getters: {
+    triple(state) {
+      return state.count * 3
+    }
+  }
+})</code></pre>
+<p>The only caveat is that at the time of this article, there is no way to attach a <code class="inline">$store</code> to <code class="inline">Vue.prototype</code>, so instead of <code class="inline">this.$store</code> we will use <code class="inline">window.store</code>. Since Vue 3 exposes it’s reactivity separately from it’s component and templating system we can use functions like <code class="inline">reactive</code> and <code class="inline">computed</code> to build a Vuex store, and unit test it entirely without even mounting a component. This works out well for us, since Vue Test Utils doesn’t have support for Vue 3 yet.</p>
+<h2>Getting Started</h2>
+<p>We will do this unit TDD, as usual. We only need to install two things: <code class="inline">vue</code> and <code class="inline">jest</code>. Install them with  <code class="inline">yarn add vue@3.0.0-alpha.1 babel-jest @babel/core @babel/preset-env</code>. Some basic config is needed - see the repository to get it. </p>
+<h2>Reactive State</h2>
+<p>The first test is related to the <code class="inline">state</code>:</p>
+<pre><code class="js lang-js language-js">test(&#39;reactive state&#39;, () =&gt; {
+  const store = new Vuex.Store({
+    state: {
+      count: 0
+    }
+  })
+  expect(store.state).toEqual({ count: 0 })
+  store.state.count++
+  expect(store.state).toEqual({ count: 1 })
+})</code></pre>
+<p>Of course this fails - Vuex is undefined. Let’s define it:</p>
+<pre><code class="js lang-js language-js">class Store {
+}
+
+const Vuex = {
+  Store
+}</code></pre>
+<p>Now we get <code class="inline">Expected: {&quot;count&quot;: 0}, Received: undefined</code>. Let’s grab <code class="inline">reactive</code> from <code class="inline">vue</code> and make it pass!</p>
+<pre><code class="js lang-js language-js">import { reactive } from &#39;vue&#39;
+
+class Store {
+  constructor(options) {
+    this.state = reactive(options.state)
+  }
+}</code></pre>
+<p>So easy with Vue’s <code class="inline">reactive</code> function. We are directly modifying <code class="inline">store.state</code> in the test - this isn’t exactly ideal, so let’s add a mutation to let us modify it that way instead.</p>
+<h2>Implementing Mutations and Commit</h2>
+<p>As above, let’s write the test first:</p>
+<pre><code class="js lang-js language-js">test(&#39;commits a mutation&#39;, () =&gt; {
+  const store = new Vuex.Store({
+    state: {
+      count: 0
+    },
+    mutations: {
+      INCREMENT(state, payload) {
+        state.count += payload
+      }
+    }
+  })
+  store.commit(&#39;INCREMENT&#39;, 1)
+  expect(store.state).toEqual({ count: 1 })
+})</code></pre>
+<p>Test is failing, as it should be. It fails with <code class="inline">TypeError: store.commit is not a function</code>. Let’s implement <code class="inline">commit</code>, as well as assign <code class="inline">options.mutations</code> to <code class="inline">this.mutations</code> so we have access to them inside <code class="inline">commit</code>.:</p>
+<pre><code class="js lang-js language-js">class Store {
+  constructor(options) {
+    this.state = reactive(options.state)
+    this.mutations = options.mutations
+  }
+
+  commit(handle, payload) {
+    const mutation = this.mutations[handle]
+    if (!mutation) {
+      throw Error(`[Hackex]: ${handle} is not defined`)
+    }
+
+    mutation(this.state, payload)
+  }
+}</code></pre>
+<p>Since <code class="inline">mutations</code> is just an object mapping properties to functions, we can just grab it using the <code class="inline">handle</code> argument, and call it, passing in <code class="inline">this.state</code>. We can also write a test for the case where the mutation is not defined:</p>
+<pre><code class="js lang-js language-js">test(&#39;throws an error for a missing mutation&#39;, () =&gt; {
+  const store = new Vuex.Store({ state: {}, mutations: {} })
+  expect(() =&gt; store.commit(&#39;INCREMENT&#39;, 1)).toThrow(&#39;[Hackex]: INCREMENT is not defined&#39;)
+})</code></pre>
+<h2>Dispatching and Action</h2>
+<p><code class="inline">dispatch</code> is very similar to <code class="inline">commit</code> - both take the name of the function to call as a string as the first argument, and a payload for the second argument. Instead of receiving the <code class="inline">state</code>, though, an action receives a <code class="inline">context</code> object, which exposes <code class="inline">state</code>, <code class="inline">commit</code>, <code class="inline">getters</code> and <code class="inline">dispatch</code>. Also, <code class="inline">dispatch</code> will always returns a <code class="inline">Promise</code> - so <code class="inline">dispatch(...).then</code> should be valid. This means if the user’s action does not return a Promise, or calling something that does like <code class="inline">axios.get</code>, we need to return one on behalf of the user.</p>
+<p>With this in mind, we can write the following test:</p>
+<p>We can write a test as follows. You may notice the tests getting repetitive - we can clean that up later with some factory functions.</p>
+<pre><code class="js lang-js language-js">test(&#39;dispatches an action&#39;, async () =&gt; {
+  const store = new Vuex.Store({
+    state: {
+      count: 0
+    },
+    mutations: {
+      INCREMENT(state, payload) {
+        state.count += payload
+      }
+    },
+    actions: {
+      increment(context, payload) {
+        context.commit(&#39;INCREMENT&#39;, payload)
+      }
+    }
+  })
+
+  store.dispatch(&#39;increment&#39;, 1).then(() =&gt; {
+    expect(store.state).toEqual({ count: 1 })
+  })
+})</code></pre>
+<p>Running this now gives us <code class="inline">TypeError: store.dispatch is not a function</code>. We know from previously we need to assign the actions in the constructor too, so let’s do both those things, as well as calling the <code class="inline">action</code> in the same way we called the <code class="inline">mutation</code> earlier:</p>
+<pre><code class="js lang-js language-js">class Store
+  constructor(options) {
+    // ...
+    this.actions = options.actions
+  }
+  
+  // ...
+  dispatch(handle, payload) {
+    const action = this.actions[handle]
+    const actionCall = action(this, payload)
+  }
+}</code></pre>
+<p>Now we get <code class="inline">TypeError: Cannot read property &#39;then&#39; of undefined</code>. This is, of course, because are are not return a <code class="inline">Promise</code> - we are not returning anything at all, in fact. We can check if the return value is a <code class="inline">Promise</code> like so, and if not, return one:</p>
+<pre><code class="js lang-js language-js">class Store {
+  // ...
+
+  dispatch(handle, payload) {
+    const action = this.actions[handle]
+    const actionCall = action(this, payload)
+    if (!actionCall || !typeof actionCall.then) {
+      return Promise.resolve(actionCall)
+    }
+    return actionCall
+  }</code></pre>
+<p>This isn’t too different from how the real Vuex does it, see the source code <a href="https://github.com/vuejs/vuex/blob/e0126533301febf66072f1865cf9a77778cf2176/src/store.js#L457">here</a>. Now the test is passing!</p>
+<h2>Implementing Getters with <code class="inline">computed</code></h2>
+<p>Implementing <code class="inline">getters</code> is a bit more interesting. We also get to use the new <code class="inline">computed</code> method exposed by Vue. Let’s write the test.</p>
+<pre><code class="js lang-js language-js">test(&#39;getters&#39;, () =&gt; {
+  const store = new Vuex.Store({
+    state: {
+      count: 5
+    },
+    mutations: {},
+    actions: {},
+    getters: {
+      triple(state) {
+        return state.count * 3
+      }
+    }
+  })
+
+  expect(store.getters[&#39;triple&#39;]).toBe(15)
+  store.state.count += 5
+  expect(store.getters[&#39;triple&#39;]).toBe(30)
+})</code></pre>
+<p>As before, we get <code class="inline">TypeError: Cannot read property &#39;triple&#39; of undefined</code>. This time, however, we cannot just do <code class="inline">this.getters = getters</code> in the <code class="inline">constructor</code> - we need to loop over them and ensure they are all using <code class="inline">computed</code> with <code class="inline">reactive</code> state. A simple but incorrect way would look like this:</p>
+<pre><code class="js lang-js language-js">class Store {
+  constructor(options) {
+    // ...
+
+    if (!options.getters) {
+      return
+    }
+
+    for (const [handle, fn] of Object.entries(options.getters)) {
+      this.getters[handle] = computed(() =&gt; fn(this.state)).value
+    }
+  }
+}</code></pre>
+<p><code class="inline">Object.entries(options.getters)</code> returns the <code class="inline">handle</code> (in this case <code class="inline">triple</code>) and the callback (the getter function) here. When we run the test, the first assertion <code class="inline">expect(store.getters[&#39;triple&#39;]).toBe(15)</code> passes. Because we are returning <code class="inline">.value</code>, however, we lose reactivity = <code class="inline">store.getters[&#39;triple&#39;]</code> is forever assigned a number. We want to return and call <code class="inline">computed</code> instead. We can accomplish this using <code class="inline">Object.defineProperty</code>, which lets us define a dynamic <code class="inline">get</code> method on an object. This is also how the real Vuex does this - see <a href="https://github.com/vuejs/vuex/blob/e0126533301febf66072f1865cf9a77778cf2176/src/store.js#L269">here</a>.</p>
+<p>Our updated, working implementation is as follows:</p>
+<pre><code class="js lang-js language-js">class Store {
+  constructor(options) {
+    // ...
+
+    for (const [handle, fn] of Object.entries(options.getters)) {
+      Object.defineProperty(this.getters, handle, {
+        get: () =&gt; computed(() =&gt; fn(this.state)).value,
+        enumerable: true
+      })
+    }
+  }
+}</code></pre>
+<p>Now it’s working.</p>
+<h2>Nested state with modules</h2>
+<p>To be fully compliant with the real Vuex, we need to implement modules. I won’t do that here, since the article would be very long. Basically, you just need to recursively repeat the above process for each module, creating the namespace appropriately. Let’s see how this might look for modules with nested <code class="inline">state</code>. The test looks like this:</p>
+<pre><code class="js lang-js language-js">test(&#39;nested state&#39;, () =&gt; {
+  const store = new Vuex.Store({
+    state: {
+      count: 5
+    },
+    mutations: {},
+    actions: {},
+    modules: {
+      levelOne: {
+        state: {},
+        modules: {
+          levelTwo: {
+            state: { name: &#39;level two&#39; }
+          }
+        }
+      }
+    }
+  })
+
+  expect(store.state.levelOne.levelTwo.name).toBe(&#39;level two&#39;)
+})</code></pre>
+<p>We can implement this using some tricky recursion:</p>
+<pre><code class="js lang-js language-js">const registerState = (modules, state = {}) =&gt; {
+  for (const [name, module] of Object.entries(modules)) {
+    state[name] = module.state
+    if (module.modules) {
+      registerState(module.modules, state[name])
+    }
+  }
+
+  return state
+}</code></pre>
+<p>Again, <code class="inline">Object.entries</code> is very useful here - we get the name of the module, and the content. If the module has <code class="inline">modules</code>, we just call <code class="inline">registerState</code> again on that module, passing in the previous module’s state. This allows us to nest arbitrarily deep. When we hit the bottom level module, we just return the <code class="inline">state</code>. <code class="inline">actions</code>, <code class="inline">mutations</code> and <code class="inline">getters</code> are a tiny bit more involved. I may implement them in a future article.</p>
+<p>We can update the <code class="inline">constructor</code> to use the <code class="inline">registerState</code> method, and all the tests are passing again. This is done before actions/mutations/getters, so they can have access to the entire state, which has been passed into <code class="inline">reactive</code>.</p>
+<pre><code class="js lang-js language-js">class Store {
+  constructor(options) {
+    let nestedState = {}
+    if (options.modules) {
+      nestedState = registerState(options.modules, options.state)
+    }
+    this.state = reactive({ ...options.state, ...nestedState })
+
+    // ..
+  }
+}</code></pre>
+<h2>Improvements</h2>
+<p>There are some features that we did not implement - namely:</p>
+<ul>
+<li>namespaced actions/mutations/getters for modules
+</li>
+<li>a plugin system
+</li>
+<li>ability to <code class="inline">subscribe</code> to mutations/actions (used mainly by plugins)
+</li>
+</ul>
+<p>I may cover these in a future article, but it’s not too difficult to implement them. They make good exercises for the motivated reader.</p>
+<h2>Conclusion</h2>
+<ul>
+<li>Building reactive plugins for Vue is even easier with Vue 3’s exposed reactivity system
+</li>
+<li>It is possible to build a reactive plugin entirely decoupled from Vue - we didn’t once render a component or open a browser, but we can be confident the plugin works correctly, in both a web and non-web environment (eg Weex, NativeScript, whatever else the Vue community dreams up)
+</li>
+</ul>
+
+  </div>
+</body>
+</html>
