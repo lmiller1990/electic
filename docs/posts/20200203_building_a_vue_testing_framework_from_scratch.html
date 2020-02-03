@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200203 Building a Vue Testing Framework from Scratch
+  </h1>
+
+  <div class="post_body">
+    <p>UI Libraries like Vue and React and their Testing libraries, Vue Test Utils and Enzyme, can seem like “magic” sometimes. To remove this magic and see exactly how a test framework works, let’s build a simple unit testing framework for Vue.js 3, from scratch. Will will see that testing frameworks are just simple wrappers that provide an abstraction around basic usual DOM APIs.</p>
+<p>We will also learn to write Vue components using render functions, instead of single file components (<code class="inline">.vue</code> files). This will simplify the setup for this article. The focus of this article is on the concepts behind a unit testing framework, not the specific technologies we are using.</p>
+<h2>What are we building?</h2>
+<p>We will write a testing framework that implements a subset of Vue Test Utils that will allow us to write the following test:</p>
+<pre><code class="js lang-js language-js">const wrapper = mount(Component)
+expect(wrapper.find(&#39;#root&#39;).text()).toBe(&#39;&#39;Count is 0&#39;)
+
+wrapper.find(&#39;button&#39;).trigger(&#39;click&#39;)
+expect(wrapper.find(&#39;#root&#39;).text()).toBe(&#39;&#39;Count is 1&#39;)</code></pre>
+<p>This has a whole bunch of useful functionality that can accomplish quite a lot - finding elements, triggering events, and asserting content is rendered correctly.</p>
+<h2>Getting Started</h2>
+<p>This article requires <code class="inline">jest</code> and the latest alpha for Vue. Install them with <code class="inline">yarn add vue@3.0.0-alpha.4 jest</code>. All the content for this article will be in an entire script, <code class="inline">index.spec.js</code>.</p>
+<p>Next, we will define the <code class="inline">App</code> component using a <code class="inline">render</code> function. A <code class="inline">render</code> function is composed from 1 or more <code class="inline">h</code> functions, which can be used to built DOM structures. <code class="inline">h</code> has a few different signatures, taking between between 1 and 3 arguments. For the sake of simplicity, we will use the implementation of <code class="inline">h</code> with three arguments: <code class="inline">h(TAG, props, content)</code>, where <code class="inline">props</code> is an object of properties, and <code class="inline">content</code> is either text content or an array of more <code class="inline">h</code> functions. It’s probably easier to see this as an example than explain it using text:</p>
+<pre><code class="js lang-js language-js">const App = {
+  render() {
+    return h(
+      &#39;div&#39;,
+      {},
+      [h(&#39;div&#39;, { id: &#39;root&#39; }, &#39;Count is ?&#39;)]
+    )
+  }
+}</code></pre>
+<p>This will build the follow DOM structure:</p>
+<pre><code class="html lang-html language-html">&lt;div&gt;
+  &lt;div id=&quot;root&gt;Count is ?&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+<p>Now let’s attempt it mount it. Vue 3 uses <code class="inline">createApp</code> to render an app:</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const app = createApp(App).mount(&#39;#app&#39;)
+})</code></pre>
+<p>Running this with <code class="inline">yarn jest</code> gives us an error: <code class="inline">[Vue warn]: Failed to mount app: mount target selector returned null.</code>. Makes sense… there is no <code class="inline">&lt;div id=&quot;app&quot; /&gt;</code> to mount the app. Jest runs in a DOM like environment using a library called <code class="inline">jsdom</code>, so we can go ahead and create an element for the app to mount on:</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  const app = createApp(App).mount(&#39;#app&#39;)
+
+  console.log(document.body.outerHTML)
+})</code></pre>
+<p>Adding in the <code class="inline">console.log</code> and running the test again gives us <code class="inline">&lt;body&gt;&lt;div id=&quot;app&quot;&gt;&lt;div&gt;&lt;div id=&quot;root&quot;&gt;Count is ?&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/body&gt;</code>. The app has successfully mounted!</p>
+<h2>Creating <code class="inline">Increment</code></h2>
+<p>We still haven’t got a whole lot to test. Let’s build a simple <code class="inline">Increment</code> component, that emits a <code class="inline">increment</code> event when it is clicked. The parent (<code class="inline">App</code>) will respond to this by incrementing a count by 1. First, update <code class="inline">App</code>:</p>
+<pre><code class="js lang-js language-js">const App = {
+  setup() {
+    return {
+      count: ref(0)
+    }
+  },
+
+  render() {
+    return h(
+      &#39;div&#39;,
+      {},
+      [
+        h(&#39;div&#39;, { id: &#39;root&#39; }, `Count is ${this.count}`),
+        h(Increment, { onIncrement: () =&gt; this.count++ })
+      ]
+    )
+  }
+}</code></pre>
+<p>When rendering a DOM element, <code class="inline">h</code> takes the tag name as a string. For a custom component, however, it takes the actual component as an object. This will compile to the following:</p>
+<pre><code class="html lang-html language-html">&lt;div&gt;
+  &lt;div id=&quot;root&gt;Count is ?&lt;/div&gt;
+  &lt;Increment @increment=&quot;count++&quot; /&gt;
+&lt;/div&gt;</code></pre>
+<p>Of course the test is failing now - let’s create the <code class="inline">Increment</code> component.</p>
+<h2>Creating the Increment Component</h2>
+<p>We are about to see cool feature of Vue 3’s <code class="inline">setup</code> function in the <code class="inline">Increment</code> component - it can return a render function!</p>
+<pre><code class="js lang-js language-js">const Increment = {
+  setup(props, context) {
+    return () =&gt; h(
+      &#39;button&#39;, 
+      { 
+        onClick: () =&gt; context.emit(&#39;increment&#39;)
+      },
+      &#39;Increment&#39;
+    )
+  }
+}</code></pre>
+<p>The way you handle emitting events in Vue 3 components using the <code class="inline">setup</code> function is by calling <code class="inline">context.emit</code>. This compiles the following:</p>
+<pre><code class="html lang-html language-html">&lt;button @click=&quot;emit(&#39;increment&#39;)&quot;&gt;Increment&lt;/button&gt;</code></pre>
+<p>The errors are gone - let’s make some actual assertions now we have an application work with.</p>
+<h2>Writing the Assertions</h2>
+<p>The test we will write is kind obvious, based on the component we just wrote:</p>
+<ul>
+<li>assert count is 0
+</li>
+<li>find and click the <code class="inline">button</code>
+</li>
+<li>assert count is 1
+</li>
+</ul>
+<p>We will refactor this into the nice API described at the beginning soon. For now, let’s get something working, then work backwards from there.</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  const app = createApp(App).mount(&#39;#app&#39;)
+
+  expect(document.querySelector(&#39;#root&#39;).textContent).toBe(&#39;Count is 0&#39;)
+  // click the button
+  await nextTick()
+  expect(document.querySelector(&#39;#root&#39;).textContent).toBe(&#39;Count is 1&#39;)
+})</code></pre>
+<p>The first assertion passes, which makes sense. The second one fails. Let’s see how to dispatch a click event.</p>
+<h2>Dispatching DOM Events</h2>
+<p>The DOM exposes quite a few low level utilities to create and dispatch events. In day to day use, you don’t see these often, but they are what drives frameworks like Vue and React. You can create and dispatch a <code class="inline">click</code> event as follows:</p>
+<pre><code class="js lang-js language-js">const evt = document.createEvent(&#39;Event&#39;)
+evt.initEvent(&#39;click&#39;)
+&lt;DOM ELEMENT&gt;.dispatchEvent(evt)</code></pre>
+<p>You can learn more about these methods on <a href="https://developer.mozilla.org/en-US/docs/Web/API/Document/createElement">MDN</a>. We can implement this in our tests as follows:</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  const app = createApp(App).mount(&#39;#app&#39;)
+
+  expect(document.querySelector(&#39;#root&#39;).textContent).toBe(&#39;Count is 0&#39;)
+  const evt = document.createEvent(&#39;Event&#39;)
+  evt.initEvent(&#39;click&#39;)
+  document.querySelector(&#39;button&#39;).dispatchEvent(evt)
+  // click the button
+  await nextTick()
+  expect(document.querySelector(&#39;#root&#39;).textContent).toBe(&#39;Count is 1&#39;)
+})</code></pre>
+<p>It now passes! This test is pretty difficult to read and understand - let’s work backwards towards to the API described in the beginning.</p>
+<h2>Creating the <code class="inline">mount</code> method</h2>
+<p>The first part of the API we will implement is <code class="inline">mount</code>. It takes a single argument, the component to mount - in this case, <code class="inline">App</code>. It will contain all the logic to render the Vue app:</p>
+<pre><code class="js lang-js language-js">function mount(Compoment) {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  const app = createApp(App).mount(&#39;#app&#39;)
+  return app
+}
+
+test(&#39;renders an app&#39;, async () =&gt; {
+  mount(App)
+
+  // ...
+})</code></pre>
+<p>Still passing. The next part is to implement a <code class="inline">wrapper</code> around the raw <code class="inline">app</code> which is returned from <code class="inline">mount</code>. The reason for this is we want to implement methods like <code class="inline">wrapper#find</code> and <code class="inline">wrapper#trigger</code> - it’s not ideal to attach those to the <code class="inline">app</code> object.</p>
+<h2>Implementing VueWrapper</h2>
+<p>We will define two types of <code class="inline">wrapper</code>. <code class="inline">VueWrapper</code>, which wraps Vue components, and <code class="inline">DOMWrapper</code>, which wraps raw DOM elements. Let’s start with <code class="inline">VueWrapper</code> and a <code class="inline">find</code> function.</p>
+<pre><code class="js lang-js language-js">class VueWrapper {
+  constructor(vm) {
+    this.vm = vm
+  }
+
+  find(selector) {
+    return this.vm.$el.querySelector(selector)
+  }
+}</code></pre>
+<p>We save the <code class="inline">vm</code> on the class instance for use functions such as <code class="inline">find</code>. Find is fairly trivial to implement. Next, we use <code class="inline">VueWrapper</code> in <code class="inline">mount</code>:</p>
+<pre><code class="js lang-js language-js">function mount(Compoment) {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  const app = createApp(App).mount(&#39;#app&#39;)
+  return new VueWrapper(app)
+}</code></pre>
+<p>Next, we can simplify our first assertion using the new <code class="inline">find</code> method:</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const wrapper = mount(App)
+  expect(wrapper.find(&#39;#root&#39;).textContent).toBe(&#39;Count is 0&#39;)
+})</code></pre>
+<p>Now the test is a lot more readable. We can do better - let’s implement <code class="inline">DOMWrapper</code> and <code class="inline">trigger</code>.</p>
+<h2>Implementing DOMWrapper</h2>
+<p><code class="inline">DOMWrapper</code> is similar to <code class="inline">VueWrapper</code>. <code class="inline">trigger</code> is more or less the logic we wrote earlier.</p>
+<pre><code class="js lang-js language-js">class DOMWrapper {
+  constructor(element) {
+    this.element = element
+  }
+
+  trigger(evtString) {
+    const evt = document.createEvent(&#39;Event&#39;)
+    evt.initEvent(evtString)
+    this.element.dispatchEvent(evt)
+  }
+}</code></pre>
+<p>We now need to make a change to <code class="inline">VueWrapper#find</code> to return a <code class="inline">DOMWrapper</code>.</p>
+<pre><code class="js lang-js language-js">class VueWrapper {
+  constructor(vm) {
+    this.vm = vm
+  }
+
+  find(selector) {
+    return new DOMWrapper(this.vm.$el.querySelector(selector))
+  }
+}</code></pre>
+<p>Now that <code class="inline">find</code> returns a <code class="inline">DOMWrapper</code> instead of a <code class="inline">HTMLElement</code>, we can no longer do <code class="inline">wrapper.find(&#39;#root&#39;).textContent</code> - we need to call <code class="inline">textContent</code> on the <code class="inline">element</code> property of <code class="inline">DOMWrapper</code>. This is not ideal, and the solution is to implement a <code class="inline">text</code> method on the <code class="inline">DOMWrapper</code> - an exercise for the reader.</p>
+<p>Now we have <code class="inline">trigger</code> and <code class="inline">DOMWrapper</code> implemented, our test looks like this:</p>
+<pre><code class="js lang-js language-js">test(&#39;renders an app&#39;, async () =&gt; {
+  const wrapper = mount(App)
+  expect(wrapper.find(&#39;#root&#39;).element.textContent).toBe(&#39;Count is 0&#39;)
+
+  wrapper.find(&#39;button&#39;).trigger(&#39;click&#39;)
+  // click the button
+  await nextTick()
+  expect(wrapper.find(&#39;#root&#39;).element.textContent).toBe(&#39;Count is 1&#39;)
+})</code></pre>
+<p>Looking good. </p>
+<h2>Discussion</h2>
+<p>There is a more valuable lesson here than how to build a simple test framework. We demonstrated that testing frameworks are simply <em>abstractions on the existing tooling</em> - there is nothing you can do with a testing framework you could not have accomplished with regular DOM APIs. The benefit of a framework is to make your testing more readable and maintainable.</p>
+<h2>Conclusion and Improvements</h2>
+<p>Some improvements that can be made are:</p>
+<ul>
+<li>implementing <code class="inline">DOMWrapper#text</code>, so we do not need to do <code class="inline">find(&#39;...&#39;).element.textContent</code>
+</li>
+<li>return <code class="inline">nextTick from</code>trigger<code class="inline">, so you can do</code>await wrapper.find(‘…’).trigger(‘..’)
+</li>
+</ul>
+<p>These are good exercises for the reader.</p>
+
+  </div>
+</body>
+</html>
