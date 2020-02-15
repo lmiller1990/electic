@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200215 Vuejs 3 and TypeScript
+  </h1>
+
+  <div class="post_body">
+    <p>Options Composition API, JavaScript and TypeScript - one API and language to rule them all?</p>
+<p>In this article, I will convert Vue.js 3 component built using regular JavaScript and the options API to use TypeScript and the Composition API. We will see some of the differences, and potential benefits. </p>
+<p>You can find the source code for this article <a href="https://gist.github.com/lmiller1990/f12b847fc23592f25ab70b17074fe946">here</a>.</p>
+<p>Since the component has tests, and we will see if those tests are useful during the refactor, and if we need to improve them. A good rule of thumb is if you are purely refactoring, and not changing the public behavior of the component, you should not need to change you tests. If you do, you are testing implementation details, which is not ideal.</p>
+<h2>The Component</h2>
+<p>I will be refactoring the <code class="inline">News</code> component. It’s written using render functions, since Vue Test Utils and Jest don’t have official support for Vue.js 3 components yet. For those unfamiliar with render functions, I commented the generated HTML. Since the source code is quite long, the basic idea is this markup is generated:</p>
+<pre><code class="html lang-html language-html">&lt;div&gt;
+  &lt;h1&gt;Posts from {{ selectedFilter }}&lt;/h1&gt;
+  &lt;Filter 
+    v-for=&quot;filter in filters&quot; 
+    @select=&quot;filter =&gt; selectedFilter = filter&quot;
+    :filter=&quot;filter&quot;
+  /&gt;
+  &lt;NewsPost v-for=&quot;post in filteredPosts&quot; :post=&quot;post&quot; /&gt;
+&lt;/div&gt;</code></pre>
+<p>This post shows some news posts, rendered by <code class="inline">&lt;NewsPost /&gt;</code>. The user can configure which period of time they’d like to see news from using the <code class="inline">&lt;Filter /&gt;</code> component, which basically just renders some buttons with labels like “Today”, “This Week” etc.</p>
+<p>I’ll introduce the source code for each component as we work through the refactor. To give an idea of how a user interacts with the component, here are the tests:</p>
+<pre><code class="ts lang-ts language-ts">describe(&#39;FilterPosts&#39;, () =&gt; {
+  it(&#39;renders today posts by default&#39;, async () =&gt; {
+    const wrapper = mount(FilterPosts)
+
+    expect(wrapper.find(&#39;.post&#39;).text()).toBe(&#39;In the news today...&#39;)
+    expect(wrapper.findAll(&#39;.post&#39;)).toHaveLength(1)
+  })
+
+  it(&#39;toggles the filter&#39;, async () =&gt; {
+    const wrapper = mount(FilterPosts)
+
+    wrapper.findAll(&#39;button&#39;)[1].trigger(&#39;click&#39;)
+    await nextTick()
+
+    expect(wrapper.findAll(&#39;.post&#39;)).toHaveLength(2)
+    expect(wrapper.find(&#39;h1&#39;).text()).toBe(&#39;Posts from this week&#39;)
+    expect(wrapper.findAll(&#39;.post&#39;)[0].text()).toBe(&#39;In the news today...&#39;)
+    expect(wrapper.findAll(&#39;.post&#39;)[1].text()).toBe(&#39;In the news this week...&#39;)
+  })
+})</code></pre>
+<p>The changes I’ll be discussing are:</p>
+<ul>
+<li>using the composition API’s <code class="inline">ref</code> and <code class="inline">computed</code> instead of <code class="inline">data</code> and <code class="inline">computed</code>
+</li>
+<li>using TypeScript to strongly type <code class="inline">posts</code>, <code class="inline">filters</code>, etc.
+</li>
+<li>most importantly, which API I like, and the pros and cons of JS and TS
+</li>
+</ul>
+<h2>Typing the <code class="inline">filter</code> type and Refactoring <code class="inline">Filter</code></h2>
+<p>It makes sense to start from the simplest component, and work our way up. The <code class="inline">Filter</code> component looks like this:</p>
+<pre><code class="ts lang-ts language-ts">const filters = [&#39;today&#39;, &#39;this week&#39;]
+
+export const Filter = defineComponent({
+  props: {
+    filter: {
+      type: String,
+      required: true
+    }
+  },
+
+  render() {
+    // &lt;button @click=&quot;$emit(&#39;select&#39;, filter)&gt;{{ filter }}/&lt;button&gt;
+    return h(&#39;button&#39;, { onClick: () =&gt; this.$emit(&#39;select&#39;, this.filter) }, this.filter)
+  }
+})</code></pre>
+<p>The main improvement we will make it typing the <code class="inline">filter</code> prop. We can do this using a <code class="inline">type</code> (you could also use an <code class="inline">enum</code>):</p>
+<pre><code class="ts lang-ts language-ts">type FilterPeriod = &#39;today&#39; | &#39;this week&#39;
+const filters: FilterPeriod[] = [&#39;today&#39;, &#39;this week&#39;]
+
+export const Filter = defineComponent({
+  props: {
+    filter: {
+      type: String as () =&gt; FilterPeriod,
+      required: true
+    }
+  },
+  // ...
+)</code></pre>
+<p>You also need this weird <code class="inline">String as () =&gt; FilterPeriod</code> syntax - I am not too sure why, some limitation of Vue’s <code class="inline">props</code> system, I suppose. </p>
+<p>This change is already a big improvement - instead of the reader trying to figure out what kind of <code class="inline">string</code> is actual a valid <code class="inline">filter</code>, and potentially making a typo, they can leverage an IDE and find out before they even run the tests or try to open the app.</p>
+<p>We can also move the <code class="inline">render</code> function to the <code class="inline">setup</code> function; this way, we get better type inference on <code class="inline">this.filter</code> and <code class="inline">this.$emit</code>:</p>
+<pre><code class="ts lang-ts language-ts">setup(props, ctx) { 
+  return () =&gt; h(&#39;button&#39;, { onClick: () =&gt; ctx.emit(&#39;select&#39;, props.filter) }, props.filter)
+}</code></pre>
+<p>The main reason this gives better type inference is that it is easier to type <code class="inline">props</code> and <code class="inline">context</code>, which are easily defined objects, to <code class="inline">this</code>, which is highly dynamic in JavaScript.</p>
+<p>I’ve heard when Vetur, the VSCode plugin for Vue components is updated for Vue 3, you will actually get type inference in <code class="inline">&lt;template&gt;</code>, which is really exciting!</p>
+<p>The tests still pass - let’s move on to the <code class="inline">NewsPost</code> component.</p>
+<h2>Typing the <code class="inline">post</code> type and <code class="inline">NewsPost</code></h2>
+<p><code class="inline">NewsPost</code> looks like this:</p>
+<pre><code class="ts lang-ts language-ts">export const NewsPost = defineComponent({
+  props: {
+    post: {
+      type: Object,
+      required: true
+    }
+  },
+
+  render() {
+    return h(&#39;div&#39;, { className: &#39;post&#39; }, this.post.title)
+  }
+})</code></pre>
+<p>Another very simple component. You’ll notice that <code class="inline">this.post.title</code> is not typed - if you open this component in VSCode, it says <code class="inline">this.post</code> is <code class="inline">any</code>. This is because it’s difficult to type <code class="inline">this</code> in JavaScript. Also, <code class="inline">type: Object</code> is not exactly the most useful type definition. What properties does it have? Let’s solve this by defining a <code class="inline">Post</code> interface:</p>
+<pre><code class="ts lang-ts language-ts">interface Post {
+  id: number
+  title: string
+  created: Moment
+}</code></pre>
+<p>While we are at it, let’s move the <code class="inline">render</code> function to <code class="inline">setup</code>:</p>
+<pre><code class="ts lang-ts language-ts">export const NewsPost = defineComponent({
+  props: {
+    post: {
+      type: Object as () =&gt; Post,
+      required: true
+    },
+  },
+
+  setup(props) {
+    return () =&gt; h(&#39;div&#39;, { className: &#39;post&#39; }, props.post.title)
+  }
+})</code></pre>
+<p>If you open this in VSCode, you’ll notice that <code class="inline">props.post.title</code> can have it’s type correctly inferred.</p>
+<h2>Updating <code class="inline">FilterPosts</code></h2>
+<p>Now there is only one component remaining - the top level <code class="inline">FilterPosts</code> component. It looks like this:</p>
+<pre><code class="ts lang-ts language-ts">export const FilterPosts = defineComponent({
+  data() {
+    return {
+      selectedFilter: &#39;today&#39;
+    }
+  },
+
+  computed: {
+    filteredPosts() {
+      return posts.filter(post =&gt; {
+        if (this.selectedFilter === &#39;today&#39;) {
+          return post.created.isSameOrBefore(moment().add(0, &#39;days&#39;))
+        }
+
+        if (this.selectedFilter === &#39;this week&#39;) {
+          return post.created.isSameOrBefore(moment().add(1, &#39;week&#39;))
+        }
+
+        return post
+      })
+    }
+  },
+
+  // &lt;h1&gt;Posts from {{ selectedFilter }}&lt;/h1&gt;
+  // &lt;Filter 
+  //   v-for=&quot;filter in filters&quot; 
+  //   @select=&quot;filter =&gt; selectedFilter = filter
+  //   :filter=&quot;filter&quot;
+  // /&gt;
+  // &lt;NewsPost v-for=&quot;post in posts&quot; :post=&quot;post&quot; /&gt;
+  render() {
+    return (
+      h(&#39;div&#39;,
+        [
+          h(&#39;h1&#39;, `Posts from ${this.selectedFilter}`),
+          filters.map(filter =&gt; h(Filter, { filter, onSelect: filter =&gt; this.selectedFilter = filter })),
+          this.filteredPosts.map(post =&gt; h(NewsPost, { post }))
+        ],
+      )
+    )
+  }
+})</code></pre>
+<p>I will start by removing the <code class="inline">data</code> function, and defining <code class="inline">selectedFilter</code> as a <code class="inline">ref</code> in <code class="inline">setup</code>. <code class="inline">ref</code> is generic, so I can pass it a type using <code class="inline">&lt;&gt;</code>. Now <code class="inline">ref</code> know what values can and cannot be assigned to <code class="inline">selectedFilter</code>.</p>
+<pre><code class="ts lang-ts language-ts">setup() {
+  const selectedFilter = ref&lt;FilterPeriod&gt;(&#39;today&#39;)
+
+  return {
+    selectedFilter
+  }
+}</code></pre>
+<p>The test are still passing, so let’s move the <code class="inline">computed</code> method, <code class="inline">filteredPosts</code>, to <code class="inline">setup</code>.</p>
+<pre><code class="ts lang-ts language-ts">const filteredPosts = computed(() =&gt; {
+  return posts.filter(post =&gt; {
+    if (selectedFilter.value === &#39;today&#39;) {
+      return post.created.isSameOrBefore(moment().add(0, &#39;days&#39;))
+    }
+
+    if (selectedFilter.value === &#39;this week&#39;) {
+      return post.created.isSameOrBefore(moment().add(1, &#39;week&#39;))
+    }
+
+    return post
+  })
+})</code></pre>
+<p>This hardly changes - the only real difference is instead of <code class="inline">this.selectedFilter</code>, we use <code class="inline">selectedFilter.value</code>. <code class="inline">value</code> is required to access the <code class="inline">selectedFilter</code> - without <code class="inline">value</code>, you are referring to the <code class="inline">Proxy</code> object, which is a new ES6 JavaScript API that Vue uses for reactivity in Vue 3. If you open this in VSCode, you will notice that <code class="inline">selectedFilter.value === &#39;this year&#39;</code>, for example, would be flagged as a compiler error. We typed <code class="inline">FilterPeriod</code> so errors like this can be caught by the IDE or compiler.</p>
+<p>This final change is to move the <code class="inline">render</code> function to <code class="inline">setup</code>:</p>
+<pre><code class="ts lang-ts language-ts">return () =&gt; 
+  h(&#39;div&#39;,
+    [
+      h(&#39;h1&#39;, `Posts from ${selectedFilter.value}`),
+      filters.map(filter =&gt; h(Filter, { filter, onSelect: filter =&gt; selectedFilter.value = filter })),
+      filteredPosts.value.map(post =&gt; h(NewsPost, { post }))
+    ],
+  )</code></pre>
+<p>We are now returning a function from <code class="inline">setup</code>, so we not longer need to return <code class="inline">selectedFilter</code> and <code class="inline">filteredPosts</code> - we directly refer to them in the function we return, because they are declared in the same scope.</p>
+<p>All the tests pass, so we are finished with the refactor.</p>
+<h2>Discussion</h2>
+<p>One important thing to notice is I did not have to change my tests are all for this refactor. That’s because the tests focus on the public behavior of the component, not the implementation details. That’s a good thing.</p>
+<p>While this refactor is not especially interesting, and doesn’t bring any direct business value to the user, it does raise some interesting points to discuss as developers:</p>
+<ul>
+<li>should we use the Composition API or Options API?
+</li>
+<li>should we use JS or TS?
+</li>
+</ul>
+<h2>Composition API vs Options API</h2>
+<p>This is probably the biggest change moving from Vue 2 to Vue 3. Although you can just stick with the Options API, the fact both are present will natural lead to the question “which one is the best solution for the problem?” or “which one is most appropriate for my team?”. </p>
+<p>I don’t think one is superior to the other. Personally, I find that the Options API is easier to teach people who are new to JavaScript framework, and as such, more intuitive. Understanding <code class="inline">ref</code>, <code class="inline">reactive</code>, and the need to refer to <code class="inline">ref</code> using <code class="inline">.value</code> is a lot to learn. The Options API, at the very least, forces you into some kind of structure with <code class="inline">computed</code>, <code class="inline">methods</code> and <code class="inline">data</code>.</p>
+<p>Having said that, it is very difficult to leverage the full power of TypeScript when using the Options API - one of the reasons the Composition API is being introduced. This leads into the second point I’d like to discuss…</p>
+<h2>Typescript vs JavaScript</h2>
+<p>I found the TypeScript learning curve a bit difficult at first, but now I really enjoy writing applications using TypeScript. It has helped me catch lots of bugs, and makes things much easier to reason about - knowing a <code class="inline">prop</code> is an <code class="inline">Object</code> is nearly useless if you don’t know what properties the object has, and if they are nullable.</p>
+<p>On the other hand, I still prefer JavaScript when I want to learn a new concept, build a prototype, or just try a new library out. The ability to write code and run it in a browser without a build step is valuable, and I also don’t generally care about specific types and generics when I’m just trying something out. This is how I first learned the Composition API - just using a script tag and building a few small prototypes.</p>
+<p>Once I’m confident in a library or design pattern, and have a good idea of the problem I’m solving, I prefer to use TypeScript. Consider how widespread TypeScript is, the similarities to other popular typed languages, and the many benefits it brings, it feels professional negligent to write a large, complex application in JavaScript. The benefits of TypeScript are too attractive, especially for defining complex business logic or scaling a codebase with a team.</p>
+<p>Another place I still like JavaScript is design centric components or applications - if I’m building something that primarily operates using CSS animations, SVG and only uses Vue for things like <code class="inline">Transition</code>, basic data binding and animation hooks, I find regular JavaScript to be appropriate. The moment business logic or complexity creeps in, however, I like to move to TypeScript.</p>
+<p>In conclusion, I like TypeScript a lot, and the Composition for that reason - not because I think it is more intuitive or concise than the Options API, but because it lets me leverage TypeScript more effectively. I think both the Options API and Composition API are appropriate ways to build Vue.js components.</p>
+<h2>Conclusion</h2>
+<p>I demonstrated and discussed:</p>
+<ul>
+<li>gradually adding types to a component written in regular JavaScript
+</li>
+<li>good tests focus on behavior, not implementation details
+</li>
+<li>the benefits of TypeScript
+</li>
+<li>Options API vs Composition API 
+</li>
+</ul>
+
+  </div>
+</body>
+</html>
