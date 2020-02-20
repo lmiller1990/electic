@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200221 A Custom Renderer with vue-runtime-dom
+  </h1>
+
+  <div class="post_body">
+    <p>Vue 3 is highly modular, exposing different packages for reactivity, rendering, and runtime. Let’s explore the <code class="inline">runtime-dom</code> and <code class="inline">runtime-core</code> packages, published as part of Vue 3, and build a custom DOM renderer.</p>
+<h2>Getting Started</h2>
+<p>In this article we will explore building a simple, custom renderer using Vue 3’s new module runtime packages. Our renderer will still target the DOM, but with some extra features. You could target something else, like WebGL, Canvas, or iOS/Android if you were ambitious (this is was React Native does).</p>
+<p>We are most interested in <code class="inline">@vue/runtime-core</code> and <code class="inline">@vue/runtime-dom</code>, publushed as part of the <a href="https://github.com/vuejs/vue-next/tree/master/packages"><code class="inline">vue-next</code></a> repository. We will build a custom renderer, and see what that process looks like. Finally, modify the renderer to stub out custom components, something Vue Test Utils features via the <code class="inline">stubs</code> mounting option and <code class="inline">shallowMount</code>. </p>
+<p>First, let’s install the dependencies required: <code class="inline">yarn add typescript ts-node jsdom jsdom-global vue@3.0.0-alpha.5 pretty</code>.</p>
+<p>I’m going to use a slightly modified version of <code class="inline">@vue/runtime-dom</code> for this article. Specifically, I want to export <code class="inline">nodeOps</code> and <code class="inline">patchProp</code>. I’ll discuss what they do in more detail later in this article. You can see them imported in <code class="inline">runtime-dom</code> <a href="yarn%20link" title="@vue/runtime-dom">here</a>. I pulled the <code class="inline">vue-next</code> repository, and installed the dependencies with <code class="inline">yarn install</code>. I changed in the <code class="inline">packages/runtime-dom</code> directory and I updated the <code class="inline">src/index.ts</code> file, so the bottom of the file now has these two lines:</p>
+<pre><code class="ts lang-ts language-ts">export * from &#39;@vue/runtime-core&#39;
+export {
+  nodeOps,
+  patchProp
+}</code></pre>
+<p>Next I ran <code class="inline">yarn build runtime-dom runtime-core</code> to rebuild the package with the extra <code class="inline">export</code> statements.Lastly, I ran <code class="inline">yarn link</code>. I then changed into my custom renderer project directory. It only contains a <code class="inline">package.json</code> at this point. I ran <code class="inline">yarn link &quot;@vue/runtime-dom&quot;</code>, which was successful and displayed <code class="inline">success Using linked package for &quot;@vue/runtime-dom&quot;</code>.</p>
+<h2>Our First Renderer</h2>
+<p>Now that is set up. Let’s start off by importing some packages from Vue, and getting something rendering. I’ll be using <code class="inline">render</code> functions instead of templates, just to save the time of configuring <code class="inline">vue-loader</code>.</p>
+<pre><code class="js lang-js language-js">import &#39;jsdom-global/register&#39;
+import * as pretty from &#39;pretty&#39;
+import { createRenderer } from &#39;@vue/runtime-core&#39;
+import {
+  patchProp,
+  h,
+  nodeOps
+} from &#39;@vue/runtime-dom&#39;
+
+const { createApp } = createRenderer({
+  ...nodeOps,
+  patchProp
+})
+
+const el = document.createElement(&#39;div&#39;)
+el.id = &#39;app&#39;
+document.body.appendChild(el)
+
+const App = {
+  render() {
+     h(&#39;div&#39;, &#39;ok&#39;)
+  }
+}
+
+createApp(App).mount(document.getElementById(&#39;app&#39;))
+
+console.log(pretty(document.body.outerHTML))</code></pre>
+<p>Running this prints:</p>
+<pre><code class=" lang- language-">&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;div&gt;ok&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+<p>The first half of the code is by far the most interesting - let’s look into it in a bit more depth.</p>
+<pre><code class="js lang-js language-js">import { createRenderer } from &#39;@vue/runtime-core&#39;
+import {
+  patchProp,
+  h,
+  nodeOps
+} from &#39;@vue/runtime-dom&#39;
+
+const { createApp } = createRenderer({
+  ...nodeOps,
+  patchProp
+})</code></pre>
+<p><code class="inline">createRenderer</code> is the function Vue exposes to allow us to create custom renderers. It takes a single argument. <code class="inline">createRenderer</code> is defined in the Vue source code <a href="https://github.com/vuejs/vue-next/blob/master/packages/runtime-core/src/renderer.ts">here</a>. It takes an object with the following methods (I removed the arguments to keep things concise):</p>
+<pre><code class="ts lang-ts language-ts">export interface RendererOptions&lt;HostNode = any, HostElement = any&gt; {
+  patchProp(...): void
+  insert(...): void
+  remove(...): void
+  createElement(...): HostElement
+  createText(...): HostNode
+  createComment(...): HostNode
+  setText(...): void
+  setElementText(...): void
+  parentNode(...): HostElement | null
+  nextSibling(...): HostNode | null
+  querySelector?(...): HostElement | null
+  setScopeId?(...): void
+  cloneNode?(): HostNode
+  insertStaticContent?(...): HostElement
+}</code></pre>
+<p>Instead of defining our own, I’ll be using the existing ones, imported via <code class="inline">nodeOps</code>, and extending a few to illustrate the concept. It’s pretty clear from the name of each of the functions what they do - we basically have the classic CRUD actions, targeting the DOM:</p>
+<p>CREATE: createElement, createText, createComment, cloneNode…
+READ: querySelector
+UPDATE: setText, setElementText, patchProp…
+DELETE: remove</p>
+<h2>Customize <code class="inline">insert</code></h2>
+<p>Let’s start by customizing <code class="inline">insert</code>. I basically grabbed the code from the <code class="inline">vue-next</code> source and modified it a bit. <code class="inline">insert</code> serves two purposes; if an <code class="inline">anchor</code> is provided, it will insert an element before the <code class="inline">anchor</code> element, otherwise it simply appends the child to the parent node. We also are making all our elements have a blue background.</p>
+<pre><code class="js lang-js language-js">const { createApp } = createRenderer({
+  ...nodeOps,
+  patchProp,
+  insert: (child, parent, anchor) =&gt; {
+    child.style = &quot;background-color: blue&quot; 
+    if (anchor != null) {
+      parent.insertBefore(child, anchor)
+    } else {
+      parent.appendChild(child)
+    }
+  },
+})</code></pre>
+<p>Running the code again shows this working:</p>
+<pre><code class="html lang-html language-html">&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;div style=&quot;background-color: blue;&quot;&gt;ok&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+<h2>Customizing <code class="inline">createText</code></h2>
+<p>The <code class="inline">&lt;div style=&quot;background-color: blue;&quot;&gt;ok&lt;/div&gt;</code> may be inserted by <code class="inline">insert</code>, but it also uses another method in the renderer; <code class="inline">createText</code>, to create the <code class="inline">ok</code> text. Let’s modify <code class="inline">createText</code> to always append a <code class="inline">!</code> to the text. Note I wrapped the <code class="inline">ok</code> in <code class="inline">App</code> in an array, to force Vue to create a new text node instead of just setting <code class="inline">innerHTML</code>.</p>
+<pre><code class="js lang-js language-js">const { createApp } = createRenderer({
+  ...nodeOps,
+  patchProp,
+  createText: (text) =&gt; {
+    return document.createTextNode(`${text}!`)
+  },
+  insert: (child, parent, anchor) =&gt; {
+    child.style = &quot;background-color: blue&quot; 
+    if (anchor != null) {
+      parent.insertBefore(child, anchor)
+    } else {
+      parent.appendChild(child)
+    }
+  },
+})
+
+// ...
+
+const App = {
+  render() {
+    return h(&#39;div&#39;, [&#39;ok&#39;])
+  }
+}</code></pre>
+<p>This gives us:</p>
+<pre><code class="html lang-html language-html">&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;div style=&quot;background-color: blue;&quot;&gt;ok!&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+<p>Great. Let’s move on to something a more practical.</p>
+<h2>Stub Renderer</h2>
+<p>Vue Test Utils has a feature that lets you <code class="inline">stub</code> out a component. This is useful if you have a component you don’t want to render, because it does some API calls, or has some side effect you don’t want in your tests. You can also use <code class="inline">shallowMount</code> to stub out all children.  We can’t accomplish this in the any of the methods we pass to <code class="inline">createRenderer</code> though; by that point, Vue has compiled custom components, and we are just working with raw DOM elements. instead, let’s modify the <code class="inline">h</code> function to support stubbing out components. <code class="inline">h</code> has a ton of different signatures, see the full implementation in <code class="inline">@vue/runtime-core</code> <a href="https://github.com/vuejs/vue-next/blob/master/packages/runtime-core/src/h.ts">here</a>.</p>
+<p>We will import it by doing <code class="inline">import * as DOM fro &#39;@vue/runtime-core</code>. If we just do <code class="inline">import { h } from &#39;@vue-runtime/core</code>, we will not be able to override it. For now, let’s just add some <code class="inline">console.log</code>.</p>
+<pre><code class="js lang-js language-js">import * as DOM from &#39;@vue/runtime-dom&#39;
+const originalH = DOM.h
+DOM.h = (...args) =&gt; {
+  console.log(args)
+  return originalH(...args)
+}</code></pre>
+<p>Running this, we get <code class="inline">[ &#39;div&#39;, [ &#39;ok&#39; ] ]</code>. The first argument is the tag, the second is the children. Makes sense - we pass in <code class="inline">h(&#39;div&#39;, [&#39;ok&#39;])</code>. Let’s add a custom component, and see what happens:</p>
+<pre><code class="js lang-js language-js">
+const Hello = {
+  mount() {
+    console.log(&#39;Mount&#39;)
+  },
+  render() {
+    return h(&#39;div&#39;, &#39;Custom Component&#39;)
+  }
+}
+
+const App = {
+  render() {
+    return h(&#39;div&#39;, h(Hello))
+  }
+}</code></pre>
+<p>Running this gives us a whole bunch of stuff. The interesting part is <code class="inline">args[0]</code> for the custom component:</p>
+<pre><code class="js lang-js language-js">[ { mount: [Function: mount], render: [Function: render] } ]</code></pre>
+<p>The first argument is the component itself - in our case, it’s an object with <code class="inline">mount</code> and <code class="inline">render</code> functions. Let’s say we wanted to stub out <code class="inline">Hello</code> - we can do a check here:</p>
+<pre><code class="js lang-js language-js">import * as DOM from &#39;@vue/runtime-dom&#39;
+const originalH = DOM.h
+DOM.h = (...args) =&gt; {
+  if (args[0] === Hello) {
+    return originalH(&#39;stub&#39;)
+  }
+  return originalH(...args)
+}</code></pre>
+<p>Now we get:</p>
+<pre><code class="html lang-html language-html">&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;div style=&quot;background-color: blue;&quot;&gt;
+      &lt;stub style=&quot;background-color: blue;&quot;&gt;&lt;/stub&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+<p>The stub still gets the <code class="inline">style</code>. This shows was I said earlier - the functions passed into <code class="inline">createRenderer</code> are run on the raw DOM elements, after the custom components have been compiled by Vue. Note that the <code class="inline">console.log</code> in <code class="inline">mount</code> no longer triggers - this is correct behavior for a stub, we should not be calling any of it’s methods or lifecycle hooks.</p>
+<p>We could improve the stub <code class="inline">h</code> function by checking if the component has a <code class="inline">name</code>, and rendering <code class="inline">${name}-stub</code>. Then we’d get:</p>
+<pre><code class="html lang-html language-html">&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;div style=&quot;background-color: blue;&quot;&gt;
+      &lt;hello-stub style=&quot;background-color: blue;&quot;&gt;&lt;/hello-stub&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+<p>Which looks a little nicer.</p>
+<h2>Improvements</h2>
+<p>There are some improvements for this stub renderer - namely, we’d want to have an array of stubs that we check against, instead of hardcoding <code class="inline">args[0] === Hello</code> - it would be nice if the user could define their own custom stub render function, for example they might want to render something different, like a component designed specifically for testing or assertions. We also had to modify the Vue source to expose <code class="inline">nodeOps</code> - maybe there is a way to extend the DOM renderer without this.</p>
+<h2>Conclusion</h2>
+<p>We’ve seen how you can build, or extend, a custom renderer with Vue’s new modular structure. I’d like to look at a more robust custom renderer in the future, perhaps something relating to SVG or Canvas. Digging into a complex code base can be daunting, but experimenting is the best way to learn.</p>
+
+  </div>
+</body>
+</html>
