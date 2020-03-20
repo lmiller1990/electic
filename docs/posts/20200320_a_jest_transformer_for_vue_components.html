@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200320 A Jest Transformer for Vue Components
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, we build a transformer to change Vue 3 <code class="inline">.vue</code> component into a format Jest can understand. This is what <code class="inline">vue-jest</code> does, and how Vue Test Utils works. We will do this using a TDD like process: write what we want, and follow the errors to success.</p>
+<h2>Getting Started</h2>
+<p>So, without further ado, we install <code class="inline">jest</code> and write a test:</p>
+<pre><code class="js lang-js language-js">const Foo = require(&#39;./Foo.vue&#39;)
+
+test(&#39;Loads a vue file&#39;, () =&gt; {
+  console.log(document.body.outerHTML) // &lt;div&gt;Hello world&lt;/div&gt;, eventually
+})</code></pre>
+<p>Running <code class="inline">yarn jest</code> at this point This fails - we don’t have a <code class="inline">Foo.vue</code>. Make one:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;
+    Hello {{ world }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { ref } from &#39;vue&#39;
+
+export default {
+  setup() {
+    return {
+      world: ref(&#39;world&#39;)
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Running this again with <code class="inline">yarn jest</code> gives us a new error:</p>
+<pre><code class=" lang- language-">Jest encountered an unexpected token
+
+    ({&quot;Object.&lt;anonymous&gt;&quot;:function(module,exports,require,__dirname,__filename,global,jest){&lt;template&gt;
+                                                                                             ^</code></pre>
+<p>What do we do?!</p>
+<h2>Using @vue/compiler-sfc</h2>
+<p>Jest does not know what to do with <code class="inline">&lt;template&gt;</code>. For this, we will pull in <code class="inline">@vue/compiler-sfc</code>! Install that, and the latest vue, with: <code class="inline">yarn add vue@3.0.0-alpha.8 @vue/compiler-sfc@3.0.0-alpha.8</code>.</p>
+<p>The SFC compiler comes with a <code class="inline">parse</code> function. Jest transforms can be written in any file, as long as they export a <code class="inline">process</code> function. Make <code class="inline">index.js</code> that exports a <code class="inline">process</code> function:</p>
+<pre><code class="js lang-js language-js">const { parse } = require(&#39;@vue/compiler-sfc&#39;)
+
+module.exports.process = (source, filename) =&gt; {
+  console.log(source)
+}</code></pre>
+<p>And use the transform by creating a jest.config.js</p>
+<pre><code class="js lang-js language-js">module.exports = { 
+  transform: {
+    &#39;.vue$&#39;: &#39;./index.js&#39;
+  }
+}</code></pre>
+<p>This was, all <code class="inline">.vue</code> files will be interpretted as the return value from <code class="inline">process</code>. Let’s try <code class="inline">parse</code> in the <code class="inline">process</code> function:</p>
+<pre><code class="js lang-js language-js">module.exports.process = (source, filename) =&gt; {
+  const parsed = parse(source)
+  console.log(parsed)
+}</code></pre>
+<pre><code class="js lang-js language-js">{
+  descriptor: {
+    filename: &#39;component.vue&#39;,
+    template: {
+      type: &#39;template&#39;,
+      content: &#39;\n  &lt;div&gt;\n    Hello {{ world }}\n  &lt;/div&gt;\n&#39;,
+      loc: [Object],
+      attrs: {},
+      map: [Object]
+    },
+    script: {
+      type: &#39;script&#39;,
+      content: &#39;\n&#39; +
+        &quot;import { ref } from &#39;vue&#39;\n&quot; +
+        &#39;\n&#39; +
+        &#39;export default {\n&#39; +
+        &#39;  setup() {\n&#39; +
+        &#39;    return {\n&#39; +
+        &quot;      world: ref(&#39;world&#39;)\n&quot; +
+        &#39;    }\n&#39; +
+        &#39;  }\n&#39; +
+        &#39;}\n&#39;,
+      loc: [Object],
+      attrs: {},
+      map: [Object]
+    },
+    styles: [],
+    customBlocks: []
+  },
+  errors: []
+}</code></pre>
+<p>There is tons of good stuff here. We are interested in the <code class="inline">template</code> and <code class="inline">script</code> fields for now. Let’s parse the template with <code class="inline">compileTemplate</code>, also from <code class="inline">@vue/compiler-sfc</code>:</p>
+<pre><code class="js lang-js language-js">const { parse, compileTemplate } = require(&#39;@vue/compiler-sfc&#39;)
+
+module.exports.process = (source, filename) =&gt; {
+  const parsed = parse(source)
+  const template = compileTemplate({ source: parsed.descriptor.template.content }).code
+  console.log(template)
+
+  return template
+}</code></pre>
+<p>We get a render function! </p>
+<pre><code class="js lang-js language-js">&#39;import { toDisplayString as _toDisplayString, createVNode as _createVNode, openBlock as _openBlock, createBlock as _createBlock } from &quot;vue&quot;\n&#39; +
+    &#39;\n&#39; +
+    &#39;export function render(_ctx, _cache) {\n&#39; +
+    &#39;  return (_openBlock(), _createBlock(&quot;div&quot;, null, &quot;Hello &quot; + _toDisplayString(_ctx.world), 1 /* TEXT */))\n&#39; +
+    &#39;}&#39;,</code></pre>
+<p>If we return it from <code class="inline">process we get &quot;SyntaxError: Cannot use import statement outside a module&quot;</code>. This is because it is using ES modules (<code class="inline">export</code> and <code class="inline">import</code>). We need some way for Jest to understand ES modules. We could use a preset, like <code class="inline">babel-jest</code>, or we can just compile the code ourselves using babel - I will be doing the latter. Install babel with <code class="inline">yarn add @babel/core</code> and use it:</p>
+<h2>Transpiling with babel and babel preset</h2>
+<pre><code class="js lang-js language-js">// ...
+const { transform } = require(&#39;@babel/core&#39;)
+
+module.exports.process = (source, filename) =&gt; {
+  // ...
+  const template = compileTemplate({ source: parsed.descriptor.template.content }).code
+  return transform(template)
+}</code></pre>
+<p>Still no luck! We need to tell babel what to target with a preset - by default babel doesn’t do a whole lot. We can use <code class="inline">preset-env</code>, which targets node module syntax by default. Install it with <code class="inline">yarn add @babel/preset-env</code>:</p>
+<pre><code class="js lang-js language-js">const { parse, compileTemplate } = require(&#39;@vue/compiler-sfc&#39;)
+const { transform } = require(&#39;@babel/core&#39;)
+const babelPreset = require(&#39;@babel/preset-env&#39;)
+
+module.exports.process = (source, filename) =&gt; {
+  const parsed = parse(source)
+  const template = compileTemplate({ source: parsed.descriptor.template.content }).code
+
+  return transform(template, { presets: [babelPreset] })
+}</code></pre>
+<p>Finally our test are green! No errors. - Mount the <code class="inline">Foo.vue</code> component:</p>
+<pre><code class="js lang-js language-js">const { createApp } = require(&#39;vue&#39;)
+
+const Foo = require(&#39;./Foo.vue&#39;)
+
+test(&#39;Loads a vue file&#39;, () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+  createApp(Foo).mount(el)
+  console.log(document.body.outerHTML) // &lt;div&gt;Hello world&lt;/div&gt;
+})</code></pre>
+<p>Now we have <code class="inline">&lt;div&gt;Hello &lt;/div&gt;</code>! Not bad - but where is <code class="inline">world</code>? There is also an error showing:</p>
+<pre><code class=" lang- language-">[Vue warn]: Property &quot;world&quot; was accessed during render but is not defined on instance.
+      at &lt;Anonymous&gt; (Root)
+
+  console.log index.spec.js:9
+    &lt;body&gt;&lt;div id=&quot;app&quot;&gt;&lt;div&gt;Hello &lt;/div&gt;&lt;/div&gt;&lt;/body&gt;</code></pre>
+<h2>Combining template’s render function and the script content</h2>
+<p>This above warning is happening because we are only returning the compiler <code class="inline">&lt;template&gt;</code> - what about the <code class="inline">&lt;script&gt;</code>? That’s why <code class="inline">world</code> is not defined, and we get the warning. Let’s compile the <code class="inline">&lt;script&gt;</code> tag in the same way:</p>
+<pre><code class="js lang-js language-js">const { parse, compileTemplate } = require(&#39;@vue/compiler-sfc&#39;)
+const { transform } = require(&#39;@babel/core&#39;)
+const babelPreset = require(&#39;@babel/preset-env&#39;)
+
+module.exports.process = (source, filename) =&gt; {
+  const parsed = parse(source)
+  const template = compileTemplate({ source: parsed.descriptor.template.content }).code
+
+  const compiledTemplate = transform(template, { presets: [babelPreset] }).code
+  const compiledScript = transform(parsed.descriptor.script.content, { presets: [babelPreset] }).code
+
+  return // ????
+}</code></pre>
+<p>We have now got two <code class="inline">module.exports</code> - <code class="inline">compiledTemplate</code> has one, <code class="inline">module.exports.default</code>, with all the content from the <code class="inline">&lt;script&gt;</code> tag. <code class="inline">compileTemplate</code> has <code class="inline">module.exports.render</code>. We need to combine them into a single <code class="inline">module.exports</code>… it’s not pretty exactly, but we do so like this:</p>
+<pre><code class="js lang-js language-js">  const compiledTemplate = transform(template, { presets: [babelPreset] }).code
+  const compiledScript = transform(parsed.descriptor.script.content, { presets: [babelPreset] }).code
+
+  return compileTemplate + compiledScript + &#39;; module.exports = {...module.exports.default, render};&#39;</code></pre>
+<p>Now we are rendering <code class="inline">&lt;div&gt;Hello world&lt;/div&gt;</code> without any problems!</p>
+<h2>Conclusion</h2>
+<p>We saw:</p>
+<ul>
+<li>using <code class="inline">@vue/compiler-sfc</code>, <code class="inline">parse</code>, and <code class="inline">compileTemplate</code>
+</li>
+<li><code class="inline">process</code> to create a jest transformer
+</li>
+<li>how to use babel and babel preset to target node module syntax
+</li>
+</ul>
+
+  </div>
+</body>
+</html>

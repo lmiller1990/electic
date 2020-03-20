@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200313 Best Practices for Testing Vue 3 Components Part 2
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, we continue developing the TodoApp from the previous post. </p>
+<p>Find it <a href="/blog/best-practices-for-testing-vue-3-components">here</a> if you have not read it for the context. We will start by by moving the new todo form to a separate component, and seeing what a test might look like if the component was to persist a todo to a backend server via an API call.</p>
+<h2>Creating a TodoForm component</h2>
+<p>Since the form is about to get a whole lot more complex, let’s create a new component for it, <code class="inline">TodoForm.vue</code>, and move the markup from <code class="inline">TodoApp.vue</code> to it:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;form @submit=&quot;createTodo&quot; data-test=&quot;todo-form&quot;&gt;
+    &lt;input type=&quot;text&quot; v-model=&quot;newTodo&quot; data-test=&quot;todo-input&quot; /&gt;
+  &lt;/form&gt;
+&lt;/template&gt;</code></pre>
+<p>In <code class="inline">TodoApp.vue</code>, we just import and render a <code class="inline">&lt;TodoForm /&gt;</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;
+    &lt;div
+      v-for=&quot;todo in todos&quot;
+      :key=&quot;todo.id&quot;
+      data-test=&quot;todo&quot;
+      :class=&quot;[ todo.completed ? &#39;completed&#39; : &#39;&#39; ]&quot;
+    &gt;
+      {{ todo.text }}
+
+      &lt;input type=&quot;checkbox&quot; v-model=&quot;todo.completed&quot; data-test=&quot;complete-checkbox&quot; /&gt;
+    &lt;/div&gt;
+    &lt;TodoForm /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</code></pre>
+<p>All the test are now failing, since we need to move the business logic from the <code class="inline">TodoApp</code> to <code class="inline">TodoForm</code>. Let’s do that.</p>
+<p><code class="inline">TodoApp.vue</code> now looks like this:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;
+    &lt;div
+      v-for=&quot;todo in todos&quot;
+      :key=&quot;todo.id&quot;
+      data-test=&quot;todo&quot;
+      :class=&quot;[ todo.completed ? &#39;completed&#39; : &#39;&#39; ]&quot;
+    &gt;
+      {{ todo.text }}
+
+      &lt;input type=&quot;checkbox&quot; v-model=&quot;todo.completed&quot; data-test=&quot;complete-checkbox&quot; /&gt;
+    &lt;/div&gt;
+    &lt;TodoForm @createTodo=&quot;createTodo&quot; /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { ref } from &#39;vue&#39;
+
+import TodoForm from &#39;./TodoForm.vue&#39;
+
+interface Todo {
+  id: number
+  text: string
+  completed: boolean
+}
+
+export default {
+  components: {
+    TodoForm
+  },
+
+  setup() {
+    const todos = ref&lt;Todo[]&gt;([
+      {
+        id: 1,
+        text: &#39;do some work&#39;,
+        completed: false
+      }
+    ])
+    const createTodo = (todo: Todo) =&gt; {
+      todos.value.push(todo)
+    }
+
+    return {
+      todos,
+      createTodo,
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>And <code class="inline">TodoForm.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;form @submit=&quot;createTodo&quot; data-test=&quot;todo-form&quot;&gt;
+    &lt;input type=&quot;text&quot; v-model=&quot;newTodo&quot; data-test=&quot;todo-input&quot; /&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { ref } from &#39;vue&#39;
+
+export default {
+  setup(props, ctx) {
+    const newTodo = ref(&#39;&#39;)
+    const createTodo = () =&gt; {
+      const todo: Todo = {
+        id: 2,
+        text: newTodo.value,
+        completed: false
+      }
+      ctx.emit(&#39;createTodo&#39;, todo)
+    }
+
+    return {
+      createTodo,
+      newTodo
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>The main change is <code class="inline">createTodo</code> in <code class="inline">TodoForm</code> now emits a <code class="inline">createTodo</code> event, which <code class="inline">TodoApp</code> then responds to. Now our tests are passing again. </p>
+<h2>A review of our tests</h2>
+<p>Notice we did <strong>not</strong> change the tests at any point - this is a VERY GOOD THING. Good tests operate on behavior, not implementation details. If you find yourself having to change your tests when you refactor your code, chances are, you are testing implementation details (aka, <strong>how</strong> the code works) rather than the public API and behavior (what the code actually does).</p>
+<p>Since we did not change and features, just performed a refactor, we should not, and did not, change our tests. Great!</p>
+<h2>Adding a test for TodoForm</h2>
+<p>Let’s add a basic test for TodoForm. It will be similar to the TodoApp test, where we will out the form and submit it.</p>
+<pre><code class="ts lang-ts language-ts">import { mount } from &#39;../src&#39;
+
+import TodoForm from &#39;./TodoForm.vue&#39;
+
+const mockTodo = {
+  id: 2,
+  text: &#39;Test todo&#39;,
+  completed: false
+}
+
+test(&#39;creates a todo&#39;, async (done) =&gt; {
+  const wrapper = mount(TodoForm)
+
+  wrapper.find&lt;HTMLInputElement&gt;(&#39;[data-test=&quot;todo-input&quot;]&#39;).element.value = &#39;My new todo&#39;
+  await wrapper.trigger(&#39;submit&#39;)
+
+  expect(wrapper.emitted().createTodo).toHaveLength(1)
+  expect(wrapper.emitted().createTodo[0]).toEqual([ mockTodo ])
+})</code></pre>
+<p><code class="inline">emitted</code> is an object that maps all the events a component has emitted during its lifetime. Each key is an array, where each entry represents a single emitted event, and the parameters it emitted. We assert that one <code class="inline">createTodo</code> event was emitted, with a <code class="inline">mockTodo</code> parameter.</p>
+<h2>Adding an API to TodoForm</h2>
+<p>Instead of just emitting a new todo, let’s make an API call, persist it to a database, then emit the new todo. We can use <code class="inline">axios</code> to make the API call. The update <code class="inline">&lt;script&gt;</code> tag in <code class="inline">TodoForm.vue</code> looks like this:</p>
+<pre><code class="html lang-html language-html">&lt;script lang=&quot;ts&quot;&gt;
+import { ref } from &#39;vue&#39;
+import axios from &#39;axios&#39;
+
+import { Todo } from &#39;./App.vue&#39;
+
+export default {
+  setup(props, ctx) {
+    const newTodo = ref(&#39;&#39;)
+    const createTodo = async () =&gt; {
+      const todo: Todo = {
+        id: 2,
+        text: newTodo.value,
+        completed: false
+      }
+      const response = await axios.post&lt;Todo&gt;(&#39;/api/todos&#39;, { todo })
+      ctx.emit(&#39;createTodo&#39;, response.data)
+    }
+
+    return {
+      createTodo,
+      newTodo
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Now the test will fail - we are making an API call in a test, which is not ideal. The API call is of course failing with a network error, so the event is not emitted. We can use <code class="inline">jest.mock</code> to fake out <code class="inline">axios</code>, and return our <code class="inline">mockTodo</code>:</p>
+<pre><code class="ts lang-ts language-ts">jest.mock(&#39;axios&#39;, () =&gt; {
+  return {
+    default: {
+      post: (url: string) =&gt; {
+        return {
+          data: mockTodo
+        }
+      }
+    }
+  }
+})</code></pre>
+<p>And great! Our test now passes. </p>
+<h2>Reflecting on the TodoForm spec</h2>
+<p>At this point, some developers may feel proud of their <code class="inline">TodoForm</code> component - full tested, all green. Our <code class="inline">TodoApp</code> tests, on the other hand, are all failing - since we now are using <code class="inline">axios</code>, we need to mock it our there as well. So…. we go ahead and move the <code class="inline">jest.mock</code> to the other test. We are now repeating ourselves - we have the same mock to test the same behavior in multiple tests! We got so excited about using <code class="inline">emitted</code> and <code class="inline">jest.mock</code> that we did not stop and ask ourselves, <em>does this make sense</em>? </p>
+<p>In my opinion, no. The TodoForm component is as much an implementation detail as how we emit events, or now we add todos to an array. Of course, if it does get sufficiently complex, we may need to have lots of fine grained tests around it. Either way, we will still need to mock <code class="inline">axios</code> out in the <code class="inline">TodoApp</code> test, to make sure we are not triggering an API call in our test. Ideally, I would not bother with a dedicated test file for <code class="inline">TodoForm</code> until it gets too complex to test as part of the <code class="inline">TodoApp</code> component - which it is not, at least at the moment.</p>
+<p>Another approach we could consider is, instead of <code class="inline">jest.mock(&#39;axios)</code> in the <code class="inline">TodoApp</code> test to prevent the API call, we could also mock out <code class="inline">TodoForm</code>: something like this would work:</p>
+<pre><code class="ts lang-ts language-ts">jest.mock(&#39;./TodoForm.vue&#39;, () =&gt; ({
+  render() {
+    return h(&#39;div&#39;)
+  }
+}))</code></pre>
+<p>I don’t find this as ideal though; I like to be able to test components and their interactions, which means a full <code class="inline">mount</code> and as little stubbing as possible.</p>
+<h2>Conclusion</h2>
+<p>We refactored the <code class="inline">TodoApp</code> component’s form and wrote some unit tests for it. Although they may not be strictly necessary now, we saw how to use <code class="inline">emitted</code> and <code class="inline">jest.mock</code> to test the <code class="inline">TodoForm.vue</code>. We also talked about the merits of mocking and stubbing, and how each has trade-offs. As always, the best decision will depend on your app and the problem you are solving. I’ll be diving more into these topics, and look forward to discussing mocking vs stubbing, shallowMount vs mount and other opinions in a future article.</p>
+
+  </div>
+</body>
+</html>
