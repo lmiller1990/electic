@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200330 Intro to Vue 3's Suspense and Testing
+  </h1>
+
+  <div class="post_body">
+    <p>Vue 3 has a new feature called “Suspense”. I find the naming to be a bit unintuitive - I had no idea what to expect when I first heard the name. I feel like a more descriptive name would be “LoadWithFallback” (although not as sexy). Anyway, today we will explore this new feature by building a simple app that shows some Covid19 (aka coronavirus) data.</p>
+<h2>Parsing the dataset</h2>
+<p>The dataset I am using is found <a href="https://github.com/pomber/covid19">here</a>. I wrote some code to transform it - I wanted to get the total fatality count in each country. Let’s take a look at the code and test:</p>
+<p>The test looks like this:</p>
+<pre><code class="ts lang-ts language-ts">import { parseData, Data } from &#39;./parseResponse&#39;
+
+const data = require(&#39;./covid19.json&#39;) as Data
+
+test(&#39;parses covid19.json&#39;, () =&gt; {
+  const expected: Record&lt;string, number&gt; = {
+    Afghanistan: 3
+  }
+
+  const actual = parseData(data)
+
+  expect(actual.Afghanistan).toBe(3)
+})</code></pre>
+<p>I like to delcare my expected value, up front, with typings before I even start writing the test. It makes it clear what the code does, and the compiler can help me out if I make a mistake.</p>
+<p>The actual implementation looks like this:</p>
+<pre><code class="ts lang-ts language-ts">interface Day {
+  date: string
+  confirmed: number
+  deaths: number
+  recovered: number
+}
+
+export type Data = Record&lt;string, Day[]&gt;
+
+const parseData = (data: Data): Record&lt;string, number&gt; =&gt; {
+  const map: Record&lt;string, number&gt; = {}
+
+  for (const [key, days] of Object.entries(data)) {
+    if (!map[key]) {
+      map[key] = 0
+    }
+
+    for (const day of days) {
+      map[key] += day.deaths
+    }
+  }
+
+  return map
+}
+
+export { parseData }</code></pre>
+<p>Nothing too exciting - we loop over the data and sum up the fatalities.</p>
+<h2>Creating App.vue</h2>
+<p>We start off by defining <code class="inline">App.vue</code>, which contains the <code class="inline">&lt;Suspense&gt;</code> component. For now, let’s focus on the <code class="inline">&lt;template&gt;</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div v-if=&quot;error&quot;&gt;
+    Error: {{ error }}
+  &lt;/div&gt;
+
+  &lt;Suspense v-else&gt;
+    &lt;template #default&gt;
+      &lt;DataTable /&gt;
+    &lt;/template&gt;
+
+    &lt;template #fallback&gt;
+      Fallback
+    &lt;/template&gt;
+  &lt;/Suspense&gt;
+&lt;/template&gt;</code></pre>
+<p>The first part is fairly simple - if there is an <code class="inline">error</code>, we render it. Next we have <code class="inline">&lt;Suspense&gt;</code>. When using <code class="inline">&lt;Suspense&gt;</code>, you need to provide templates. One is <code class="inline">#default</code>, which is a component with an <code class="inline">async setup</code> function. In this case, that will be <code class="inline">&lt;DataTable&gt;</code>. The other template is <code class="inline">#fallback</code>, which is displayed until the <code class="inline">async setup</code> function returns.</p>
+<p>Before we get into any implementation details, let’s look at the test. <code class="inline">&lt;DataTable&gt;</code> will make a HTTP call to fetch the Covid 19 data, so we need to consider the loading state, error state and success state. <code class="inline">App.spec.ts</code> looks like this:</p>
+<pre><code class="ts lang-ts language-ts">describe(&#39;App&#39;, () =&gt; {
+  test(&#39;data has not loaded&#39;, async () =&gt; {
+    const wrapper = mount(App)
+
+    expect(wrapper.html()).toContain(&#39;Fallback&#39;)
+  })
+
+  test(&#39;data has loaded&#39;, async () =&gt; {
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(wrapper.html()).toContain(&#39;Afghanistan: 3&#39;)
+  })
+
+  test(&#39;an error occurred&#39;, async () =&gt; {
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(wrapper.html()).toContain(&#39;An error occurred&#39;)
+  })
+})</code></pre>
+<p>The tests are pretty standard. One caveat is <code class="inline">flushPromises</code> - we will need this to force the <code class="inline">async setup</code> function to resolve, letting us test the success and error states.</p>
+<h2>Implementing DataTable</h2>
+<p>The <code class="inline">&lt;DataTable&gt;</code> just makes a HTTP call with <code class="inline">axios</code>, then transforms the data using the <code class="inline">parseData</code> function we defined earlier.</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div v-for=&quot;country of countries&quot; :key=&quot;country.name&quot;&gt;
+    {{ country.name }}: {{ country.deaths }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &#39;vue&#39;
+import axios from &#39;axios&#39;
+
+import { parseData } from &#39;./parseResponse&#39;
+
+export default defineComponent({
+  async setup() {
+    const response = await axios.get(&#39;/api/covid19&#39;)
+    const data = parseData(response.data)
+
+    return { 
+      countries: Object.keys(data).map(name =&gt; ({ name, deaths: data[name] })
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Pretty standard stuff - nothing here should be new, as long as you have some exposure to the Composition API. Let’s use this in <code class="inline">App.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;!-- Omitted for brevity --&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &#39;vue&#39;
+import axios from &#39;axios&#39;
+
+import DataTable from &#39;./DataTable.vue&#39;
+import { parseData } from &#39;./parseResponse&#39;
+
+export default defineComponent({
+  components: {
+    DataTable
+  },
+
+  setup() {
+    const error = ref&lt;string | null&gt;(null)
+
+    return {
+      error
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<h2>Testing Suspense</h2>
+<p>We need to mock <code class="inline">axios</code> in the test - let’s do that. Add the following code to the top of <code class="inline">App.spec.ts</code></p>
+<pre><code class="ts lang-ts language-ts">import flushPromises from &#39;flush-promises&#39;
+
+import { mount } from &#39;../src&#39;
+import App from &#39;./App.vue&#39;
+
+jest.mock(&#39;axios&#39;, () =&gt; ({
+  get: () =&gt; {
+    return { data: require(&#39;./covid19.json&#39;) }
+  }
+}))
+
+describe(&#39;App&#39;, () =&gt; {
+ // ..
+})</code></pre>
+<p>Running this will get the first two tests - success and loading - to pass! Previously, you would have to have defined a <code class="inline">loading</code> variable, and did some <code class="inline">v-if</code> and <code class="inline">v-else</code> combination. <code class="inline">&lt;Suspense&gt;</code> makes this really clean.</p>
+<p>The last test is pretty simple to get passing. We need some way to throw an error in the test. Update the <code class="inline">axios</code> mock, and the last test:</p>
+<pre><code class="ts lang-ts language-ts">let mockShouldError = false 
+
+jest.mock(&#39;axios&#39;, () =&gt; ({
+  get: () =&gt; {
+    if (mockShouldError) {
+      throw new Error(&#39;ERROR!!!&#39;)
+    }
+    return { data: require(&#39;./covid19.json&#39;) }
+  }
+}))
+
+describe(&#39;App&#39;, () =&gt; {
+  // ...
+
+  test(&#39;an error occurred&#39;, async () =&gt; {
+    mockShouldError = true // &lt;- added this
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(wrapper.html()).toContain(&#39;An error occurred&#39;)
+  })
+})</code></pre>
+<p>Setting <code class="inline">mockShouldError</code> will simulate the <code class="inline">axios</code> call erroring out. Finally, we need to handle the error in the component with <code class="inline">&lt;Suspense&gt;</code>, in this case <code class="inline">App.vue</code>. We do so with the <code class="inline">onErrorCaptured</code> hook:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;!-- Omitted for brevity --&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, onErrorCaptured, ref } from &#39;vue&#39;
+import axios from &#39;axios&#39;
+
+import DataTable from &#39;./DataTable.vue&#39;
+import { parseData } from &#39;./parseResponse&#39;
+
+export default defineComponent({
+  components: {
+    DataTable
+  },
+
+  setup() {
+    const error = ref&lt;string | null&gt;(null)
+    onErrorCaptured(e =&gt; {
+      error.value = &#39;An error occurred&#39;
+      return true
+    })
+
+    return {
+      error
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Make sure you <code class="inline">return true</code> - otherwise the error will not be captured, and bubble up to the top of your app.</p>
+<h2>Conclusion</h2>
+<p>This simple demo introduced the new <code class="inline">&lt;Suspense&gt;</code> component and <code class="inline">onErrorCaptured</code> hook, and showed how is simplifies the common use case of fetchign data asynchronously when a component is mounted.</p>
+
+  </div>
+</body>
+</html>
