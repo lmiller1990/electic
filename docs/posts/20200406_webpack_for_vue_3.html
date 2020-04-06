@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200406 Webpack for Vue 3
+  </h1>
+
+  <div class="post_body">
+    <p>In this article we build a webpack configuration from scratch for developing Vue.js 3 apps. Specifically, we will support <code class="inline">.vue</code> files, TypeScript, and hot reload.</p>
+<p>We start with an almost empty project, with the following files:</p>
+<p><code class="inline">src/main.ts</code></p>
+<pre><code class="ts lang-ts language-ts">import { createApp } from &#39;vue&#39;
+
+import App from &#39;./App.vue&#39;
+
+createApp(App).mount(&#39;#app&#39;)</code></pre>
+<p><code class="inline">src/App.vue</code></p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div&gt;Vue app&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &#39;vue&#39;
+
+export default defineComponent({
+  template: `&lt;div&gt;adf&lt;/div&gt;`
+})
+&lt;/script&gt;</code></pre>
+<p>And <code class="inline">index.html</code>, at the root level:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+  &lt;script src=&quot;/dist/main.js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<h2>Installing Webpack</h2>
+<p>We will use webpack to bundle our app. Install it with <code class="inline">yarn add webpack webpack-cli</code>. Next create <code class="inline">webpack.config.js</code> and include:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+module.exports = {
+  entry: &#39;./src/main.ts&#39;,
+  output: {
+    path: path.resolve(__dirname, &#39;./dist&#39;),
+  }
+}</code></pre>
+<p>This is a minimal webpack config. We specify the entry file, and the output. <code class="inline">path.resolve</code> is a cross platform way to specify a directory. If we run <code class="inline">yarn webpack --mode=&quot;development&quot;</code> we get:</p>
+<pre><code class="sh lang-sh language-sh">ERROR in ./src/App.vue 1:0
+Module parse failed: Unexpected token (1:0)
+You may need an appropriate loader to handle this file type, currently no loaders are configured to process this file. See https://webpack.js.org/concepts#loaders
+&gt; &lt;template&gt;
+|   &lt;div&gt;Vue app&lt;/div&gt;
+| &lt;/template&gt;
+ @ ./src/main.ts 3:0-27 5:10-13</code></pre>
+<h2>Installing Vue Loader</h2>
+<p>Of course, it has no idea how to read a <code class="inline">.vue</code> file. Luckily we can use <code class="inline">vue-loader</code> for this. The latest version is 16, which supports Vue 3. Let’s install it, and <code class="inline">vue</code> and the sfc-compiler, with <code class="inline">yarn add vue-loader@16.0.0-alpha.3 vue@3.0.0-alpha.11 @vue/compiler-sfc@3.0.0-alpha.11</code>. Next, we configure webpack to us the loader:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+module.exports = {
+  entry: &#39;./src/main.ts&#39;,
+  output: {
+    path: path.resolve(__dirname, &#39;./dist&#39;),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: &#39;vue-loader&#39;
+      }
+    ]
+  }
+}</code></pre>
+<p>Any file matching the regular expression <code class="inline">/\.vue$/</code> will be loaded using <code class="inline">vue-loader</code>. Running the <code class="inline">yarn webpack mode==&quot;development&quot;</code> again gives us:</p>
+<pre><code class="sh lang-sh language-sh">ERROR in ./src/App.vue
+Module Error (from ./node_modules/vue-loader/dist/index.js):
+vue-loader was used without the corresponding plugin. Make sure to include VueLoaderPlugin in your webpack config.
+ @ ./src/main.ts 3:0-27 5:10-13</code></pre>
+<p>It even tells us what to do - use <code class="inline">VueLoaderPlugin</code>. Let’s do that:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+const { VueLoaderPlugin } = require(&#39;vue-loader&#39;)
+
+module.exports = {
+  // ...
+  plugins: [
+    new VueLoaderPlugin()
+  ]
+}</code></pre>
+<p>Running webpack again yields a successful build! Take a look at <code class="inline">dist/main.ts</code> to see the messy bundle webpack builds. Let’s use a minimal python server to serve the <code class="inline">index.html</code> - If you don’t have python installed, skip this, we will use a node based development server soon. </p>
+<p>Running <code class="inline">python3 -m http.server</code> and visiting <code class="inline">localhost:8000</code> gives our Vue app! No problems.</p>
+<h2>TypeScript</h2>
+<p>You may be surprised to see Webpack reading <code class="inline">.ts</code> files without a problem. Well, turns out, none of those files have any actual TypeScript - just regular JS without type annotations. Let’s add a type annotation to <code class="inline">main.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { createApp } from &#39;vue&#39;
+
+import App from &#39;./App.vue&#39;
+
+const s: string = 1
+
+createApp(App).mount(&#39;#app&#39;)</code></pre>
+<p>Building the project now gives us an error:</p>
+<pre><code class=" lang- language-">ERROR in ./src/main.ts 5:7
+Module parse failed: Unexpected token (5:7)
+You may need an appropriate loader to handle this file type, currently no loaders are configured to process this file. See https://webpack.js.org/concepts#loaders
+| import App from &#39;./App.vue&#39;
+|
+&gt; const s: string = 1</code></pre>
+<p>Yep, webpack doesn’t know about TypeScript. Let’s fix that by installing <code class="inline">typescript</code> and <code class="inline">ts-loader</code>: <code class="inline">yarn add typescript and ts-loader</code>. Now head to the webpack config and add the following:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+const { VueLoaderPlugin } = require(&#39;vue-loader&#39;)
+
+module.exports = {
+  // ...
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: &#39;vue-loader&#39;
+      },
+      {
+        test: /\.ts$/,
+        loader: &#39;ts-loader&#39;
+      }
+    ]
+  },
+  // ...
+}</code></pre>
+<p>You will also need a minimal <code class="inline">tsconfig.json</code> or <code class="inline">ts-loader</code> will complain. Add the following to <code class="inline">tsconfig.json</code>:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;compilerOptions&quot;: {
+  }
+}</code></pre>
+<p>TypeScript’s compiler has many options. We will add them as we need them, to ensure we know what they all do.</p>
+<p>Running wepback again gives us the expected error:</p>
+<pre><code class=" lang- language-">ERROR in /Users/lachlan/code/dump/webpack-boilerplate/src/main.ts
+./src/main.ts
+[tsl] ERROR in /Users/lachlan/code/dump/webpack-boilerplate/src/main.ts(5,7)
+      TS2322: Type &#39;1&#39; is not assignable to type &#39;string&#39;.</code></pre>
+<p>We can remove that line from <code class="inline">main.ts</code> now.</p>
+<h2><code class="inline">appendTsToSuffix</code></h2>
+<p>Although everything seems fine, it’s not. If you visit <code class="inline">localhost:8000</code>, you will see our app is not loading. There is an error in the console:</p>
+<pre><code class=" lang- language-">TypeError: component is undefined</code></pre>
+<p>It’s not immediately clear what is going on. If you <code class="inline">console.log(App)</code> in <code class="inline">main.ts</code>, you will see it is… undefined. <code class="inline">ts-loader</code> isn’t working correctly with <code class="inline">vue-loader</code>. It took me a while to figure this out, we actually need to add <code class="inline">.ts</code> to the end of the <code class="inline">.vue</code> files to make <code class="inline">ts-loader</code> process them. Here is how you do it:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+const { VueLoaderPlugin } = require(&#39;vue-loader&#39;)
+
+module.exports = {
+  // ...
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: &#39;vue-loader&#39;
+      },
+      {
+        test: /\.ts$/,
+        loader: &#39;ts-loader&#39;,
+        options: {
+          appendTsSuffixTo: [/\.vue$/]
+        }
+      }
+    ]
+  },
+  // ...
+}</code></pre>
+<p>Run webpack again. It works!</p>
+<h2>Add <code class="inline">devServer</code></h2>
+<p>Let’s get rid of the python server, and use a node based webpack development server, that will rebuild the project and refresh the page automatically every time we save. Install it with <code class="inline">yarn add webpack-dev-server</code>. Now head back to the webpack config and update it:</p>
+<pre><code class=" lang- language-">const path = require(&#39;path&#39;)
+
+const { VueLoaderPlugin } = require(&#39;vue-loader&#39;)
+
+module.exports = {
+  // ...
+  devServer: {
+    inline: true,
+    hot: true,
+    stats: &#39;minimal&#39;,
+    contentBase: __dirname,
+    overlay: true
+  }
+}</code></pre>
+<p>That’s it! <code class="inline">hot</code> will also refresh the page automatically for us, and the other options give us error messages in the browser when compilation fails. You can run the dev server with <code class="inline">yarn webpack-dev-server</code>. Visit <code class="inline">localhost:8080</code> to see it.</p>
+<h2>Conclusion</h2>
+<p>We explored the various tools required to use Vue 3 with <code class="inline">.vue</code> files, TypeScript and have a solid development environment. We can, and will, continue to build on our webpack config as we go, and include features such as:</p>
+<ul>
+<li>minify for production
+</li>
+<li>source maps
+</li>
+<li>improve our <code class="inline">tsconfig.json</code>
+</li>
+</ul>
+<p>This forms the base of my upcoming course, Vue.js 3: TypeScript and the Composition API. It’s an advanced course, where we explore tooling, TypeScript, and the Composition API, with test driven development every step of the way. You can learn more <a href="https://vuejs-course.com/">here</a>.</p>
+
+  </div>
+</body>
+</html>
