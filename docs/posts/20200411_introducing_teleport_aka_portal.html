@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200411 Introducing Teleport aka Portal
+  </h1>
+
+  <div class="post_body">
+    <p>Let’s take a look at the new <code class="inline">&lt;Teleport</code>&gt; feature, recently renamed from <code class="inline">&lt;Portal&gt;</code>, in Vue.js 3, and some of the interesting things you might do with it.</p>
+<p>To get a basic of idea what <code class="inline">&lt;Teleport&gt;</code> does, read the <a href="https://github.com/vuejs/rfcs/pull/112">RFC</a>. Basically, it allows you to render a component at an alternative location on the page by wrapping it in <code class="inline">&lt;Teleport&gt;</code>.</p>
+<h2>A first look with render functions</h2>
+<p>The first interesting thing I noticed was when writing a render function in TypeScript. For example:</p>
+<pre><code class="ts lang-ts language-ts">import { createApp, h, defineComponent, Teleport } from &#39;vue&#39;
+
+const App = defineComponent({
+  render() {
+    return h(() =&gt; [
+      h(&#39;div&#39;, { id: &#39;dest&#39; }),
+      h(&#39;div&#39;, &#39;Hello world&#39;),
+      h(Teleport, { to: &#39;#dest&#39; })
+    ])
+  }
+})
+
+createApp(App).mount(&#39;#app&#39;)</code></pre>
+<p>The idea here is the final <code class="inline">h</code> will be teleported to the first <code class="inline">h</code>, specified by the <code class="inline">to</code> prop. This will actually give us a compile time error - <code class="inline">&lt;Teleport&gt;</code> needs some content to, well, teleport, and we haven’t given it any. This is the first time I’ve actually seen a component give a compile time error when the third argument to <code class="inline">h</code>, the children to render, was not provided. We can make this into a working example by adding children:</p>
+<pre><code class="ts lang-ts language-ts">h(Teleport, { to: &#39;#dest&#39; }, &#39;This will be teleported&#39;)</code></pre>
+<p>Another caveat, that may well be a bug, is that <code class="inline">&lt;Teleport&gt;</code> and the destination must be in components <em>without</em> a root node - also known as a fragment. That is why I am using the <code class="inline">h() =&gt; [...])</code> syntax. I am guessing this is a bug that will be fixed in a future alpha (at the time of this article, the latest version of Vue 3 is alpha-12.</p>
+<h2>Binding to Teleport</h2>
+<p>Let’s move away from the world of render functions, back into good old <code class="inline">.vue</code> files. We are going to build a small app that let’s us teleport some elements around using Vue’s reactivity. Start with the following:</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;label for=&quot;top&quot;&gt;Top&lt;/label&gt;
+  &lt;input id=&quot;top&quot; type=&quot;radio&quot; value=&quot;top&quot; v-model=&quot;selected&quot; /&gt;
+
+  &lt;label for=&quot;middle&quot;&gt;Middle&lt;/label&gt;
+  &lt;input id=&quot;middle&quot; type=&quot;radio&quot; value=&quot;middle&quot; v-model=&quot;selected&quot; /&gt;
+
+  &lt;label for=&quot;bottom&quot;&gt;Bottom&lt;/label&gt;
+  &lt;input id=&quot;bottom&quot; type=&quot;radio&quot; value=&quot;bottom&quot;  v-model=&quot;selected&quot; /&gt;
+  &lt;br /&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &#39;vue&#39;
+
+export default defineComponent({
+  setup() {
+    const selected = ref&lt;&#39;top&#39; | &#39;middle&#39; | &#39;bottom&#39;&gt;(&#39;top&#39;)
+
+    return {
+      selected,
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>So far this doesn’t do much - we have three radio buttons bound to the <code class="inline">selected</code> variable. Notice there is no root node - this is the bug I was mentioning earlier.</p>
+<p>Next, we will add three destinations - yep, a <code class="inline">&lt;Teleport&gt;</code> doesn’t have to be locked to a specific destination:</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;!-- ... --&gt;
+  &lt;h1&gt;Top&lt;/h1&gt;
+  &lt;div id=&quot;top-teleport&quot;&gt;&lt;/div&gt;
+  &lt;h1&gt;Middle&lt;/h1&gt;
+  &lt;div id=&quot;middle-teleport&quot;&gt;&lt;/div&gt;
+  &lt;h1&gt;Bottom&lt;/h1&gt;
+  &lt;div id=&quot;bottom-teleport&quot;&gt;&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+<p>You might see what’s coming next - now we have 3 radio buttons and 3 destinations, let’s finally add in the <code class="inline">&lt;Teleport&gt;</code>:</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;!-- ... --&gt;
+  &lt;teleport :to=&quot;destination&quot;&gt;
+    This will teleport
+  &lt;/teleport&gt;
+&lt;/template&gt;</code></pre>
+<p>We are binding to a <code class="inline">destination</code> variable. Let’s create that and make sure it updates when the <code class="inline">selected</code> does using a <code class="inline">computed</code> property:</p>
+<pre><code class="vue lang-vue language-vue">&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref, computed } from &#39;vue&#39;
+
+export default defineComponent({
+  setup() {
+    const selected = ref&lt;&#39;top&#39; | &#39;middle&#39; | &#39;bottom&#39;&gt;(&#39;top&#39;)
+
+    const destination = computed(() =&gt; `#${selected.value}-teleport`)
+
+    return {
+      destination,
+      selected,
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>This is enough to get everything working! It’s hard to appreciate what’s going on - best watch the accompanying screencast to really get an idea, but as you change the selected <code class="inline">&lt;Teleport&gt;</code> using the radio buttons, the content is reactively teleported!</p>
+<p>The main use case for this is probably a modal, or something that needs to be rendered at the top level of the application, but is triggered from somewhere else.</p>
+<h2>Disabling a <Teleport></h2>
+<p>It is also possible to disable a <code class="inline">&lt;Teleport&gt;</code>. A good use case for this would be when you want to close a modal, potentially. Let’s add a checkbox to support this:</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;!-- ... --&gt;
+  &lt;label for=&quot;top-disabled&quot;&gt;Disabled&lt;/label&gt;
+  &lt;input id=&quot;top-disabled&quot; type=&quot;checkbox&quot; v-model=&quot;disabled&quot; /&gt;
+
+  &lt;teleport :to=&quot;destination&quot; :disabled=&quot;disabled&quot;&gt;
+  &lt;/teleport&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref, computed } from &#39;vue&#39;
+
+export default defineComponent({
+  setup() {
+    //...
+    const disabled = ref(false)
+
+    return {
+      disabled,
+      destination,
+      selected,
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Now if you try disabling the <code class="inline">&lt;Teleport&gt;</code>, you will notice the original content is rendered back where it started - this this case, at the bottom of the page.</p>
+<h2><Teleport> maintains the state of the DOM</h2>
+<p>When content is moved around, it preserves the state of the DOM. A good example of this is using a <code class="inline">&lt;video&gt;</code> element. If you move a <code class="inline">&lt;video</code>&gt; that is playing using a <code class="inline">&lt;Teleport&gt;</code>, the video will keep on playing! <code class="inline">&lt;Teleport&gt;</code> isn’t rerendering the DOM element - it’s really moving the actual element as is, without breaking the state or rerendering it. Very cool.</p>
+<h2>Conclusion</h2>
+<p>We learned some of the neat features of <code class="inline">&lt;Teleport&gt;</code>, how to bind to it’s <code class="inline">to</code> prop, about it’s <code class="inline">disabled</code> prop, and how it preseves the state of the DOM elements it is moving.</p>
+
+  </div>
+</body>
+</html>
