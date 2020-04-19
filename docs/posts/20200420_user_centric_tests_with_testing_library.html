@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200420 User Centric Tests with Testing Library
+  </h1>
+
+  <div class="post_body">
+    <p>Explore Testing Library, a framework agnostic library for testing applications in a user centric manner.</p>
+<p><a href="https://testing-library.com/"><code class="inline">testing-library</code></a> is a framework agnostic library for testing web application. </p>
+<p>It asserts that it is:</p>
+<ul>
+<li>Simple and complete testing utilities that encourage good testing practices
+</li>
+<li>Tests only break when your app breaks, not implementation details
+</li>
+<li>Interact with your app the same way as your users
+</li>
+</ul>
+<p>Let’s write some tests, and see how it compares to Vue Test Utils (VTU). Testing Library has a very different philosophy to Vue Test Utils. Testing Library has many integrations, including a Vue specific one, which actually uses Vue Test Utils internally, but that’s an implementation detail, which isn’t really relevant to how you write your tests using Testing Library.</p>
+<h2>Getting Started.</h2>
+<p>At the time of this post, there is no Vue 3 support in Testing Library, so we will proceed using Vue 2. I cloned their Vue integration repository, found <a href="https://github.com/testing-library/vue-testing-library">here</a>, and ran <code class="inline">npm install</code>. There are lots of examples here. I also installed VTU with <code class="inline">npm install @vue/test-utils</code>.</p>
+<h2>The Component</h2>
+<p>I’ll be using the following simple component, <code class="inline">MyInput.vue</code>. It is an input with a <code class="inline">rules</code> prop for some basic validation relating to the length of the input.</p>
+<pre><code class="vue lang-vue language-vue">&lt;template&gt;
+  &lt;div&gt;
+    &lt;label :for=&quot;name&quot;&gt;{{ name }}&lt;/label&gt;
+    &lt;input v-model=&quot;value&quot; @input=&quot;$emit(&#39;input&#39;, $event.target.value)&quot; :id=&quot;name&quot; /&gt;
+    &lt;div v-if=&quot;error&quot;&gt;{{ error }}&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  props: {
+    value: {
+      type: String,
+      required: true
+    },
+
+    name: {
+      type: String,
+      required: true
+    },
+
+    rules: {
+      type: Object,
+      default: {}
+    }
+  },
+
+  computed: {
+    error() {
+      if (this.rules.min &amp;&amp; this.value.length &lt; this.rules.min) {
+        return `Error: ${this.name} is too short`
+      }
+
+      if (this.rules.max &amp;&amp; this.value.length &gt; this.rules.max) {
+        return `Error: ${this.name} is too long`
+      }
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Very standard stuff. If the input length is less than or greater than the <code class="inline">rules</code> we specify, an error is rendered. </p>
+<h2>Testing with Vue Test Utils</h2>
+<p>There are a few ways you can test this. We will want to cover three cases: no error, input is too short, and input it too long. One way to accomplish this is as follows:</p>
+<pre><code class="js lang-js language-js">describe(&#39;MyInput&#39;, () =&gt; {
+  it(&#39;renders an error when input is too long&#39;, () =&gt; {
+    const wrapper = mount(MyInput, {
+      propsData: {
+        value: &#39;123456789&#39;,
+        name: &#39;username&#39;,
+        rules: {
+          min: 1,
+          max: 5
+        }
+      }
+    })
+
+    expect(wrapper.html()).toContain(&#39;Error: username is too long&#39;)
+  })
+})</code></pre>
+<p>We just mount the component in the state we expect, and make assertions. To cover the other two cases - you can just copy and paste the test, or make them a bit more readable using a factory function, described in my <a href="/blog/reducing-duplication-in-tests">Reducing Duplication in Tests</a> article.</p>
+<p>Another way it to test them all in one way, with interaction. Both are valid, this one gets you a bit closer to how are user would use the component:</p>
+<pre><code class="js lang-js language-js">describe(&#39;MyInput&#39;, () =&gt; {
+  it(&#39;renders successfully&#39;, async () =&gt; {
+    const wrapper = mount(MyInput, {
+      propsData: {
+        value: &#39;asdf&#39;,
+        name: &#39;username&#39;,
+        rules: {
+          min: 1,
+          max: 10
+        }
+      }
+    })
+
+    expect(wrapper.html()).not.toContain(&#39;Error&#39;)
+
+    await wrapper.find(&#39;input&#39;).setValue(&#39;asdfasdfasdf&#39;)
+    expect(wrapper.html()).toContain(&#39;Error: username is too long&#39;)
+
+    await wrapper.find(&#39;input&#39;).setValue(&#39;&#39;)
+    expect(wrapper.html()).toContain(&#39;Error: username is too short&#39;)
+  })
+})</code></pre>
+<p>This is also closer to the Testing Library philosophy - “Interact with your app the same way as your users”.</p>
+<h2>Testing with Testing Library</h2>
+<p>Now, let’s see the same test, but with Testing Library. Because it uses VTU internally, some of the same mounting options are supported, such as <code class="inline">propsData</code>. I’m going to demonstrate another way to write this test, though, which I believe is more “in the spirit” of Testing Library, which is using a Parent component. Testing Library tests tend to use mounting options much less than VTU tests. Most of the other integrations, like React Testing Library, don’t even support mounting options, other than props.</p>
+<p>With this in mind, you can mount your component like this:</p>
+<pre><code class="js lang-js language-js">describe(&#39;MyInput with testing library&#39;, () =&gt; {
+  it(&#39;renders successfully&#39;, async () =&gt; {
+    const Parent = {
+      components: { MyInput },
+      data() {
+        return { username: &#39;1234&#39; }
+      },
+      template: `&lt;MyInput v-model=&quot;username&quot; name=&quot;username&quot; :rules=&quot;{ min: 3, max: 10 }&quot; /&gt;`
+    }
+  })
+})</code></pre>
+<p>The reason mounting using a Parent component is useful is because, as your app grows, you will likely find yourself using <code class="inline">MyInput.vue</code> to compose forms. When I test my forms, I have found this pattern to be very useful. You might end up with something like:</p>
+<pre><code class="js lang-js language-js">const Parent = {
+  components: { MyInput },
+  data() {
+    return {
+      username: &#39;&#39;,
+      password: &#39;&#39;
+    }
+  },
+  template: `
+    &lt;MyForm&gt;
+      &lt;MyInput v-model=&quot;username&quot; name=&quot;username&quot; :rules=&quot;{ min: 5, max: 10 }&quot; /&gt;
+      &lt;MyInput v-model=&quot;password&quot; name=&quot;password&quot; :rules=&quot;{ min: 8, max: 16 }&quot; /&gt;
+    &lt;/MyForm&gt;
+  `
+}</code></pre>
+<p>Testing Library encourages you to test like your users, and lends itself well to larger, “end to end” style tests.</p>
+<h2>Assertions and Queries with Testing Library</h2>
+<p>Now we have mounted our component, let’s get to interacting. Instead of <code class="inline">mount</code>, we do <code class="inline">render</code>. <code class="inline">render</code> takes the component as the first argument, and returns the <strong>screen</strong>.</p>
+<pre><code class="js lang-js language-js">describe(&#39;MyInput with testing library&#39;, () =&gt; {
+  it(&#39;renders successfully&#39;, async () =&gt; {
+    const Parent = {
+      components: { MyInput },
+      data() {
+        return { username: &#39;username&#39; }
+      },
+      template: `&lt;MyInput v-model=&quot;username&quot; name=&quot;username&quot; :rules=&quot;{ min: 3, max: 10 }&quot; /&gt;`
+    }
+  })
+  
+  const screen = render(Parent)
+})</code></pre>
+<p>If you do a <code class="inline">console.log</code> on <code class="inline">screen</code>, you get a bunch of methods:</p>
+<pre><code class=" lang- language-">{
+      container: HTMLDivElement {},
+      baseElement: HTMLBodyElement {},
+      debug: [Function: debug],
+      unmount: [Function: unmount],
+      isUnmounted: [Function: isUnmounted],
+      html: [Function: html],
+      emitted: [Function: emitted],
+      updateProps: [Function: updateProps],
+      queryAllByLabelText: [Function: bound queryAllByLabelText],
+      getAllByLabelText: [Function: bound getAllByLabelText],
+      queryByLabelText: [Function: bound ],
+      getByLabelText: [Function: bound ],
+      findAllByLabelText: [Function: bound ],
+      
+      // ...
+}</code></pre>
+<p>The are all listed <a href="https://testing-library.com/docs/dom-testing-library/api-queries#screendebug">here</a>. Basically, there are three ways to find elements:</p>
+<ul>
+<li>getByXXX
+</li>
+<li>queryByXXX
+</li>
+<li>findByXXX
+</li>
+</ul>
+<p><code class="inline">getBy</code> throws an error if nothing is found. <code class="inline">queryBy</code> will just return null. <code class="inline">findBy</code> is async, and will wait for a default of 1000ms before failing - this is useful for DOM nodes that might not appear immediately, a common occurrence in Vue, where the DOM is updated asynchronously.</p>
+<p>With that in mind, we can start by asserting no error is found. Testing Library supports, and seems to encourage the use of regular expressions. The reason for this that querying by a specific DOM element is against their philosophy - users don’t care about DOM elements, they care about what they can see. Regular expressions are a way to approximate this. So, we end up with this query:</p>
+<pre><code class="js lang-js language-js">expect(queryByText(/Error/)).not.toBeInTheDocument()</code></pre>
+<p>We are asserting no error, since the default value, <code class="inline">username</code>, is in the limits we set of 3-10 characters.</p>
+<p>Testing Library includes some extra assertions, like <code class="inline">toBeInTheDocument</code>. While VTU and Testing Library accomplishthe same thing via <code class="inline">wrapper.find</code> and <code class="inline">queryByText</code>, they are very different approaches:</p>
+<ul>
+<li>Vue Test Utils is <strong>component centric</strong>. We interact with and make assertions on the <strong>component</strong>.
+</li>
+<li>Testing Library is <strong>user centric</strong>. We interact using methods that have no relation to the component, since the user doesn’t know or care about those.
+</li>
+</ul>
+<h2>Interactions with Testing Library</h2>
+<p>Interactions take a similar approach in Testing Library. Instead of using <code class="inline">trigger</code> or <code class="inline">setValue</code>, we can update the input like this:</p>
+<pre><code class=" lang- language-">await fireEvent.update(getByLabelText(/username/, { selector: &#39;input&#39; }), &#39;this is a long username&#39;)
+expect(queryByText(/too long/)).toBeInTheDocument()</code></pre>
+<p>Notice we are not concerned with components; we query by the label, which is something the user would do (they literally query, using their eyes, for a “username” label). Clicking on a <code class="inline">&lt;label&gt;</code> with a <code class="inline">for=&quot;username&quot;</code> attribute will select the related <code class="inline">&lt;input&gt;</code> by the matching <code class="inline">id</code>, so Testing Library replicates this by allowing an additional <code class="inline">selector</code> option. We then assert the error using the regular expression syntax introduced previously, which is user centric, not component centric.</p>
+<h2>Discussion and Conclusion</h2>
+<p>I still think VTU has it’s place. It’s good for testing individual comoponents, especially ones with many edge cases. I will continue to use it for my personal component library, for example. Testing Library is very useful for user tests, where we are verifying the behavior and public API for our application. You could even use both in the same application; you should use the best tool for the job, whatever you decide that might be.</p>
+<p>For my next application, I plan to try using Testing Library exclusively, and see how it things go. Testing Library can do lots of other things I haven’t discussed, you can learn more <a href="https://testing-library.com/">here</a> on their official homepage. You can find the Vue integration and docs <a href="https://testing-library.com/docs/vue-testing-library/intro">here</a>, which is maintained by one of the maintainers of VTU, <a href="https://twitter.com/afontq">Adri Fontcu</a>.</p>
+
+  </div>
+</body>
+</html>
