@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200427 Bundling with Rollup
+  </h1>
+
+  <div class="post_body">
+    <p>In this article we will write a rollup config from scratch to compile a project written in TypeScript. Our goal will be three separate bundles:</p>
+<ul>
+<li>commonjs (extension <code class="inline">.cjs.js</code>, for use with node.js) 
+</li>
+<li>es module (extension <code class="inline">.esm-bundle.js</code>, for use with bundlers like webpack) 
+</li>
+<li>browser (extension <code class="inline">.browser.js</code>, for use in a browser)
+</li>
+</ul>
+<p>We also will be including type definitions for TypeScript users.</p>
+<h2>Building for node.js</h2>
+<p>Let’s get started! If you want to follow along, grab VTU next at this point in history and delete everything from the <code class="inline">rollup.config.js</code>. Add <code class="inline">export default {}</code> and run <code class="inline">yarn rollup -c rollup.config.js</code>. You will get this error: </p>
+<pre><code class=" lang- language-">Config file must export an options object, or an array of options objects</code></pre>
+<p>We will start with a object, for a single bundle, and an array when we include more. The minimal config we need is an <code class="inline">input</code>, the file to read from, and an <code class="inline">output</code>, which is where our bundled code will be written. Add the following:</p>
+<pre><code class="js lang-js language-js">export default {
+  input: &#39;src/index.ts&#39;,
+  output: {
+    file: &#39;vue-test-utils.cjs.js&#39;,
+    format: &#39;cjs&#39;
+  }
+}</code></pre>
+<p>Running this again gives us:</p>
+<pre><code class=" lang- language-">[!] Error: Could not resolve &#39;./mount&#39; from src/index.ts</code></pre>
+<p>That’s because rollup does not understand TS.</p>
+<h2>Rollup Plugins</h2>
+<p>Rollup is minimal by design and does everything via plugins. We will use <code class="inline">rollup-plugin-typescript2</code>. What hapened to <code class="inline">rollup-plugin-typescript2</code>? No idea! We also need <code class="inline">json</code> to load <code class="inline">dom-event-types</code>, which exports a json file by default. Update the config:</p>
+<pre><code class=" lang- language-">import ts from &#39;rollup-plugin-typescript2&#39;
+import json from &#39;@rollup/plugin-json&#39;
+
+export default {
+  input: &#39;src/index.ts&#39;,
+  plugins: [
+    ts(),
+    json()
+  ],
+  output: {
+    file: &#39;vue-test-utils.cjs.js&#39;,
+    format: &#39;cjs&#39;
+  }
+}</code></pre>
+<p>Now it’s compiling - with some warnings.</p>
+<pre><code class=" lang- language-">src/index.ts → vue-test-utils.cjs.js...
+(!) Unresolved dependencies
+https://rollupjs.org/guide/en/#warning-treating-module-as-external-dependency
+lodash/isString (imported by src/utils.ts)
+lodash/mergeWith (imported by src/utils.ts)
+@vue/shared (imported by src/stubs.ts, src/utils/matchName.ts)
+created vue-test-utils.cjs.js in 2.9s
+✨  Done in 3.61s.</code></pre>
+<p>If we look at the top of our bundle, we see:</p>
+<pre><code class=" lang- language-">var isString$1 = _interopDefault(require(&#39;lodash/isString&#39;));
+var mergeWith = _interopDefault(require(&#39;lodash/mergeWith&#39;));
+var shared = require(&#39;@vue/shared&#39;);</code></pre>
+<p>On the first few lines. We need to decide if we want to bundle the source code for those dependencies in our project, or require the user to install them (either by specifying them as a <code class="inline">dependency</code> or <code class="inline">peerDependency</code>. We will opt for the latter - we want the user to provide their own version of those packages. Furthermore, if you scroll down the bundled file, you will notice it’s almost 12000 lines - we are bundling the entire of Vue. This would make the user be stuck on the version of Vue we provide - not ideal. They will want to provide their own version.</p>
+<h2>Using <code class="inline">external</code></h2>
+<p>We can specify dependencies the user must provide using <code class="inline">external</code>. Update the config:</p>
+<pre><code class=" lang- language-">  external: [
+    &#39;vue&#39;,
+    &#39;@vue/shared&#39;,
+    &#39;lodash/mergeWith&#39;,
+    &#39;lodash/isString&#39;,
+    &#39;dom-event-types&#39;
+  ],</code></pre>
+<p>Now the warning is gone. Look at the bundle - it’s only around 900 lines. The top shows the dependencies will be imported from <code class="inline">node_modules</code>, where the user will install them:</p>
+<pre><code class=" lang- language-">var vue = require(&#39;vue&#39;);
+var isString = _interopDefault(require(&#39;lodash/isString&#39;));
+var mergeWith = _interopDefault(require(&#39;lodash/mergeWith&#39;));
+var shared = require(&#39;@vue/shared&#39;);
+// ...</code></pre>
+<p>This should be enough to get us going. Let’s try out the node.js build with the following script:</p>
+<pre><code class="js lang-js language-js">require(&#39;jsdom-global&#39;)()
+const { h } = require(&#39;vue&#39;)
+const { mount } = require(&#39;./vue-test-utils.cjs.js&#39;)
+
+const App = {
+  render() {
+    return h(&#39;div&#39;, &#39;Hello world&#39;) 
+  } 
+} 
+
+const wrapper = mount(App)
+console.log(wrapper.html())</code></pre>
+<p>Running this gives us <code class="inline">&lt;div&gt;Hello world&lt;/div&gt;</code>! </p>
+<h2>Building for ES Modules</h2>
+<p>Now we have our cjs build, we will focus on the ES build. This will be used by bundlers, and uses the <code class="inline">import</code> and <code class="inline">export</code> syntax. We will also refactor our <code class="inline">config</code> into a <code class="inline">createEntry</code> function, so we can reuse it:</p>
+<pre><code class="js lang-js language-js">import ts from &#39;rollup-plugin-typescript2&#39;
+
+function createEntry({ file, format }) {
+  const config = {
+    input: &#39;src/index.ts&#39;,
+    plugins: [
+      ts()
+    ],
+    external: [
+      &#39;vue&#39;,
+      &#39;@vue/shared&#39;,
+      &#39;lodash/mergeWith&#39;,
+      &#39;lodash/isString&#39;,
+      &#39;dom-event-types&#39;
+    ],
+    output: {
+      file,
+      format
+    }
+  }
+
+  return config
+}
+
+export default [
+  createEntry({ format: &#39;cjs&#39;, file: &#39;vue-test-utils.cjs.js&#39; }),
+  createEntry({ format: &#39;es&#39;, file: &#39;vue-test-utils.esm.js&#39; }),
+]</code></pre>
+<p>Other than the refactor, all we did is change the format from <code class="inline">cjs</code> to <code class="inline">es</code>. If you run <code class="inline">yarn build</code>, get a second bundle - more or less the same, but with the ES module import/export syntax.</p>
+<h2>Adding Type Definitions</h2>
+<p>We we want to provide type definitions for TS users, and so far all our bundles are in JS, so they won’t have type definitions. We will just generate the type definitions once, when we compile the <code class="inline">es</code> module. Update <code class="inline">rollup.config.js</code> like so:</p>
+<pre><code class="js lang-js language-js">import ts from &#39;rollup-plugin-typescript2&#39;
+
+function createEntry({ file, format }) {
+  const config = {
+    input: &#39;src/index.ts&#39;,
+    plugins: [],
+    external: [
+      &#39;vue&#39;,
+      &#39;@vue/shared&#39;,
+      &#39;lodash/mergeWith&#39;,
+      &#39;lodash/isString&#39;,
+      &#39;dom-event-types&#39;
+    ],
+    output: {
+      file,
+      format
+    }
+  }
+
+  config.plugins.push(
+    ts({
+      check: format === &#39;es&#39;,
+      tsconfigOverride: {
+        compilerOptions: {
+          declaration: format === &#39;es&#39;,
+          target: &#39;es5&#39;,
+        },
+        exclude: [&#39;tests&#39;]
+      }
+    })
+  )
+
+  return config
+}
+
+export default [
+  createEntry({ format: &#39;cjs&#39;, file: &#39;vue-test-utils.cjs.js&#39; }),
+  createEntry({ format: &#39;es&#39;, file: &#39;vue-test-utils.esm.js&#39; }),
+]</code></pre>
+<p>We just moved <code class="inline">ts</code> out of <code class="inline">plugins</code>, and conditionally check for <code class="inline">declaration</code> when the format is <code class="inline">es</code>. Now all the <code class="inline">.d.ts</code> files are generated.</p>
+<h2>Bundling for the Browser</h2>
+<p>The final format we are aiming for is as a global variable in a browser. First, we will add a new <code class="inline">createEntry</code> call to our exported array:</p>
+<pre><code class="js lang-js language-js">createEntry({ format: &#39;iife&#39;, input: &#39;src/index.ts&#39;, file: &#39;vue-test-utils.browser.js&#39; })</code></pre>
+<p><code class="inline">iife</code> is an immediately invoked function expression. This basically wraps our entire library in a function that is called immediately, to prevent any varibles from leaking into the global scope.</p>
+<p>Next we will update the <code class="inline">output</code> key in the config:</p>
+<pre><code class="js lang-js language-js">output: {
+  file,
+  format,
+  name: &#39;VueTestUtils&#39;,
+  globals: {
+    vue: &#39;Vue&#39;,
+    &#39;lodash/mergeWith&#39;: &#39;_.mergeWith&#39;,
+    &#39;lodash/isString&#39;: &#39;_.isString&#39;,
+  }
+}</code></pre>
+<p>Again, we don’t want to bundle Vue or lodash - the user will provide their own. Traditionally these are set to <code class="inline">Vue</code> and <code class="inline">_</code> respectively. <code class="inline">dom-event-types</code> and <code class="inline">@vue/shared</code> is a bit different - these are not common included in applications. As such, we are going to bundle this one with Vue Test Utils when it is used in a browser to make the development experience a bit more smooth. Update the config to only include <code class="inline">dom-event-types</code> and <code class="inline">@vue/shared</code> as external dependencies for the <code class="inline">es</code> and <code class="inline">cjs</code> builds:</p>
+<pre><code class="js lang-js language-js">function createEntry({ file, format }) {
+  const config = {
+    // ...
+    external: [
+      &#39;vue&#39;,
+      &#39;@vue/shared&#39;,
+      &#39;lodash/mergeWith&#39;,
+      &#39;lodash/isString&#39;,
+    ],
+    // ...
+  }
+
+  if ([&#39;es&#39;, &#39;cjs&#39;].includes(format)) {
+    config.external.push(&#39;dom-event-types&#39;)
+    config.external.push(&#39;@vue/shared&#39;)
+  }
+
+  // ...</code></pre>
+<p>Now if we run this again, it is complaining:</p>
+<pre><code class=" lang- language-">(!) Unresolved dependencies
+https://rollupjs.org/guide/en/#warning-treating-module-as-external-dependency
+@vue/shared (imported by src/stubs.ts, src/utils/matchName.ts)
+(!) Missing global variable name
+Use output.globals to specify browser global variable names corresponding to external modules</code></pre>
+<p>Rollup doesn’t know how to inline those dependencies. We have two - the <code class="inline">@vue/shared</code> dependency, a JS dependency, and the <code class="inline">dom-event-types</code>, which is really just a list of DOM events in a json file - see <a href="https://github.com/eddyerburgh/dom-event-types/blob/master/dom-event-types.json">here</a>. </p>
+<p>To include all of these, we need two plugins:</p>
+<ul>
+<li>resolve plugin
+</li>
+<li>commonjs plugin
+</li>
+</ul>
+<p>To tell rollup how to bundle json files from <code class="inline">node_modules</code>. The error message does not suggest we need these at all - there isn’t a great way to know this, without just playing around and observing the bundle. Anyway, adding those completes our config… almost:</p>
+<pre><code class="js lang-js language-js">import ts from &#39;rollup-plugin-typescript2&#39;
+import resolve from &#39;@rollup/plugin-node-resolve&#39;
+import json from &#39;@rollup/plugin-json&#39;
+import commonjs from &#39;@rollup/plugin-commonjs&#39;
+
+function createEntry({ file, format }) {
+  const config = {
+    input: &#39;src/index.ts&#39;,
+    plugins: [
+      resolve(), commonjs(), json()
+    ],
+    external: [
+      &#39;vue&#39;,
+      &#39;lodash/mergeWith&#39;,
+      &#39;lodash/isString&#39;
+    ],
+    output: {
+      file,
+      format,
+      name: &#39;VueTestUtils&#39;,
+      globals: {
+        vue: &#39;Vue&#39;,
+        &#39;lodash/mergeWith&#39;: &#39;_.mergeWith&#39;,
+        &#39;lodash/isString&#39;: &#39;_.isString&#39;,
+      }
+    }
+  }
+
+  if ([&#39;es&#39;, &#39;cjs&#39;].includes(format)) {
+    config.external.push(&#39;dom-event-types&#39;)
+    config.external.push(&#39;@vue/shared&#39;)
+  }
+
+  config.plugins.push(
+    ts({
+      check: format === &#39;es&#39;,
+      tsconfigOverride: {
+        compilerOptions: {
+          declaration: format === &#39;es&#39;,
+          target: &#39;es5&#39;,
+        },
+        exclude: [&#39;tests&#39;]
+      }
+    })
+  )
+
+  return config
+}
+
+export default [
+  createEntry({ format: &#39;cjs&#39;, file: &#39;vue-test-utils.cjs.js&#39; }),
+  createEntry({ format: &#39;es&#39;, file: &#39;vue-test-utils.esm.js&#39; }),
+  createEntry({ format: &#39;iife&#39;, input: &#39;src/index.ts&#39;, file: &#39;vue-test-utils.browser.js&#39; })
+]</code></pre>
+<p>Let’s try it out in the browser.</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+  &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.15/lodash.js&quot; integrity=&quot;sha256-kzv+r6dLqmz7iYuR2OdwUgl4X5RVsoENBzigdF5cxtU=&quot; crossorigin=&quot;anonymous&quot;&gt;&lt;/script&gt;
+  &lt;script&gt;
+  &lt;/script&gt;
+    &lt;script src=&quot;./vue.global.js&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;./vue-test-utils.browser.js&quot;&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;button onclick=&quot;run()&quot;&gt;Run&lt;/button&gt;
+&lt;/body&gt;
+
+&lt;script&gt;
+  const App = {
+    render() {
+      return Vue.h(&#39;div&#39;, &#39;Hello world&#39;)
+    }
+  }
+
+  VueTestUtils.mount(App) 
+&lt;/script&gt;
+&lt;/html&gt;</code></pre>
+<p><code class="inline">vue.global.js</code> is the latest build of Vue 3 for the browser. Running this gives us… <code class="inline">ReferenceError: process is not defined</code>. Looking in <code class="inline">vue-test-utils.browser.js</code> for <code class="inline">process.env</code> shows:</p>
+<pre><code class=" lang- language-">const EMPTY_OBJ = (process.env.NODE_ENV !== &#39;production&#39;)
+    ? Object.freeze({})
+    : {};</code></pre>
+<p>This is from <code class="inline">@vue/shared</code> - since this is designed to be used as part of a build process with a bundler (such as when you build Vue 3) the Node process variable has not been replaced. We can do this with the <code class="inline">replace</code> plugin for Rollup:</p>
+<pre><code class="js lang-js language-js">import replace from &#39;@rollup/plugin-replace&#39;
+
+function createEntry({ file, format }) {
+  const config = {
+    // ...
+    plugins: [
+      replace({
+        &quot;process.env.NODE_ENV&quot;: true
+      }),
+      resolve(), commonjs(), json()
+    ],
+
+    // ...</code></pre>
+<p>Building this one final time and opening <code class="inline">index.html</code> in a browser shows the final, working browser build!</p>
+<h2>Conclusion</h2>
+<p>We looked at Rollup, the bundler libraries, and how we can build for multiple formats:</p>
+<ul>
+<li>cjs (node.js)
+</li>
+<li>es modules (ES6)
+</li>
+<li>browser
+</li>
+</ul>
+<p>We also discussed the different ways to include or exclude libraries in the builds, and their trade-offs. Find this config in the <a href="https://github.com/vuejs/vue-test-utils-next/">Vue Test Utils Next repo</a>.</p>
+
+  </div>
+</body>
+</html>

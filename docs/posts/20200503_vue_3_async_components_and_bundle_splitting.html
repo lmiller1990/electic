@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200503 Vue 3 Async Components and Bundle Splitting
+  </h1>
+
+  <div class="post_body">
+    <p>Today we will explore the new Asynchronous Component API for Vue.js 3, and some practical use cases.</p>
+<p>It is defined in the <a href="https://github.com/vuejs/rfcs/blob/master/active-rfcs/0026-async-component-api.md">Asynchronous Component API RFC</a>.</p>
+<h2>Two ways to define async components</h2>
+<p>There are two ways you may define an asynchronous component. This is pretty typical of many APIs in Vue - you have a “simple” way, which just lets you get on with solving your problem, and a more robust way, to give you full control. This is one of the reasons I like Vue so much - it caters to both situations.</p>
+<p>Let’s start with the most simple async component, and a basic example. We will be using render functions in <code class="inline">.ts</code> files instead of <code class="inline">.vue</code> files in this article. The reason is we will be using webpack 5 beta, which does not appear to work with <code class="inline">vue-loader</code> out of the box (<code class="inline">vue-loader</code> targets webpack 4). The concepts and ideas are the same.</p>
+<pre><code class="ts lang-ts language-ts">import { defineComponent, h, createApp } from &#39;vue&#39;
+import Hello from &#39;./Hello&#39;
+
+export const App = defineComponent({
+  name: &#39;App&#39;,
+
+  components: {
+    Hello
+  },
+  
+  render() {
+    return h(&#39;div&#39;, [&#39;This is app&#39;, h(Hello)])
+  }
+})
+
+window.addEventListener(&#39;DOMContentLoaded&#39;, () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+
+  createApp(App).mount(&#39;#app&#39;)
+})</code></pre>
+<p>In this example, we just render the world “Hello” using a <code class="inline">&lt;Hello /&gt;</code> component. Not exciting. We can create an asynchronous component from any regular component though, like this:</p>
+<pre><code class="ts lang-ts language-ts">import { defineComponent, h, createApp, defineAsyncComponent } from &#39;vue&#39;
+
+const AsyncHello = defineAsyncComponent(() =&gt; import(&#39;./Hello&#39;))
+
+export const App = defineComponent({
+  name: &#39;App&#39;,
+
+  components: {
+    AsyncHello
+  },
+  
+  render() {
+    return h(&#39;div&#39;, [&#39;This is app&#39;, h(AsyncHello)])
+  }
+})</code></pre>
+<p>Vue 3 gives us a <code class="inline">defineAsyncComponent</code> function, which lets us import the component by passing a callback. This looks like nothing, but it opens a lot of possibilities. In the first example, when we build our project, we get one large <code class="inline">bundle.js</code> file that has all the component code in the build. In a very large app, this could be a very big file, which may lead to poor performance on the initial page load.</p>
+<p>By defining the component using <code class="inline">defineAsyncComponent</code>, and passing a callback, we can defer loading the <code class="inline">Hello.vue</code> component until the component is actually loaded. This main place this is useful is loading routes asynchronously - for example, you might only load the <code class="inline">/shopping_cart</code> route when (if) the user accesses that page.</p>
+<p>This alone is <em>not</em> enough to actually load the component independantly - you need to configure your build tool to create it in a separate file (this will most often be with Webpack). Most tutorials will stop here and say “that’s outside the scope of this lecture/article!” which is not exactly useful. This is not one of those articles. Install these dependencies:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;dependencies&quot;: {
+    &quot;vue&quot;: &quot;^3.0.0-beta.7&quot;,
+  },
+  &quot;devDependencies&quot;: {
+    &quot;ts-loader&quot;: &quot;^7.0.2&quot;,
+    &quot;typescript&quot;: &quot;^3.8.3&quot;,
+    &quot;webpack-cli&quot;: &quot;^3.3.11&quot;,
+    &quot;webpack&quot;: &quot;^5.0.0-beta.15&quot;
+  }
+}</code></pre>
+<p>And a simple webpack config:</p>
+<pre><code class="js lang-js language-js">const path = require(&#39;path&#39;)
+
+module.exports = {
+  mode: &quot;development&quot;,
+  entry: {
+    index: &#39;./App.ts&#39;
+  },
+  output: {
+    path: path.resolve(__dirname, &#39;./dist&#39;),
+    publicPath: &#39;/dist/&#39;
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ts$/,
+        loader: &#39;ts-loader&#39;,
+      }
+    ]
+  },
+  resolve: {
+    extensions: [&quot;.ts&quot;, &quot;.tsx&quot;, &quot;.js&quot;]
+  },
+}</code></pre>
+<p>And <code class="inline">tsconfig.json</code>:</p>
+<pre><code class="json lang-json language-json">{
+  &quot;compilerOptions&quot;: {
+    &quot;target&quot;: &quot;ES6&quot;,
+    &quot;module&quot;: &quot;ESNext&quot;,
+    &quot;moduleResolution&quot;: &quot;node&quot;,
+    &quot;lib&quot;: [&quot;es2017&quot;, &quot;dom&quot;]
+  }
+}</code></pre>
+<p>We will use webpack soon. First we will look at the a more robust way to define an async component.</p>
+<h2>The “options” API</h2>
+<p>I call this the “options” API, since you supply lots of options. First, we will build the above example using the options API:</p>
+<pre><code class="vue lang-vue language-vue">&lt;script lang=&quot;ts&quot;&gt;
+import { h, defineComponent, defineAsyncComponent, ComponentOptions } from &#39;vue&#39;
+import Hello from &#39;./Hello.vue&#39;
+
+const Loader = defineComponent({
+  render() {
+    return h(&#39;progress&#39;)
+  }
+})
+
+const AsyncHello = defineAsyncComponent({
+  loader: () =&gt; {
+    return new Promise&lt;any&gt;(res =&gt; {
+      setTimeout(() =&gt; {
+        res(Hello)
+      }, 5000)
+    })
+  },
+
+  loadingComponent: Loader,
+  delay: 0
+})
+
+export default defineComponent({
+  name: &#39;App&#39;,
+
+  components: {
+    AsyncHello
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>When using the options API, you will pass an object to <code class="inline">defineAsyncComponent</code>. I am using <code class="inline">loader</code>, <code class="inline">loadingComponent</code> and <code class="inline">delay</code>. </p>
+<ul>
+<li><code class="inline">loader</code> is a function that must return a component. When they call it <code class="inline">loader</code>, they mean “the function that will <em>load</em> the component”. In this case, we delay it for 2000ms.
+</li>
+<li><code class="inline">loadingComponent</code>. This is like <code class="inline">&lt;template #fallback&gt;</code> in the new <code class="inline">Suspense</code> API, which you can read about in my <a href="/blog/introduction-to-suspense">Introduction to Suspense</a> article. This will be displayed until <code class="inline">loader</code> returns.
+</li>
+<li><code class="inline">delay</code>. This is the duration until the <code class="inline">loadingComponent</code> is shown. I always set this to <code class="inline">0</code> - I want to show the loading component straight away, while we wait for <code class="inline">loader</code> to resolve. If it was <code class="inline">1000</code>, we should show nothing for 1000ms, then the loading component until 5000ms, then the Hello component.
+</li>
+</ul>
+<h2>When loading fails</h2>
+<p>There is another option: <code class="inline">errorComponent</code>. This will be rendered when an error occurs in <code class="inline">loader</code>. For example:</p>
+<pre><code class="ts lang-ts language-ts">const ErrorComponent = defineComponent({
+  render() {
+    return h(&#39;div&#39;, &#39;Error&#39;)
+  }
+})
+
+const AsyncHello = defineAsyncComponent({
+  loader: () =&gt; {
+    return new Promise&lt;any&gt;((res, rej) =&gt; {
+      setTimeout(() =&gt; {
+        rej()
+      }, 2000)
+    })
+  },
+
+  loadingComponent: Loader,
+  errorComponent: ErrorComponent,
+  delay: 0
+})</code></pre>
+<p>This will render <code class="inline">Error</code> after 2000ms. Not all hope is lost! There is an <code class="inline">onError</code> callback. We can use it like this:</p>
+<pre><code class="ts lang-ts language-ts">let loadAttempts = 0
+const AsyncHello = defineAsyncComponent({
+  loader: () =&gt; {
+    return new Promise&lt;any&gt;((res, rej) =&gt; {
+      setTimeout(() =&gt; {
+        if (loadAttempts &lt; 3) {
+          loadAttempts += 1
+          rej()
+        } else {
+          res(Hello)
+        }
+      }, 1000)
+    })
+  },
+
+  loadingComponent: Loader,
+  errorComponent: ErrorComponent,
+  delay: 0,
+  onError(error, retry, fail, attempts) {
+    retry()
+  }
+})</code></pre>
+<p>In this example, we keep retrying with <code class="inline">retry</code> until <code class="inline">loadAttempts</code> is greater than 3, then we successfully load the component. This wouldn’t be ideal in a production system - after a few fails attempts, you likely just want to show a error message and prompt the user to try again - your service is probably down if the component has failed to load multiple times. You can also track the amount of failures using the <code class="inline">attempts</code> argument, the fourth argument to <code class="inline">onError</code>.</p>
+<h2>Actually loading the component asynchronously</h2>
+<p>Now we know about the different ways to make asynchronous components, time to see it in action. Create <code class="inline">Hello.ts</code> and <code class="inline">Greet.ts</code> like so:</p>
+<pre><code class=" lang- language-">// Hello.ts
+import { defineComponent, h, ref, defineAsyncComponent } from &quot;vue&quot;;
+
+
+export default defineComponent({
+  data() {
+    return {
+      show: false
+    }
+  },
+
+  render() {
+    if (this.show) {
+      const Greet = defineAsyncComponent(() =&gt; import(&#39;./Greet&#39;))
+      return h(Greet)
+    } else {
+      return h(&#39;button&#39;, { onClick: () =&gt; this.show = true }, &#39;Show Greeting&#39;)
+    }
+  }
+})</code></pre>
+<pre><code class=" lang- language-">// Greet.ts
+import { defineComponent, h } from &quot;vue&quot;;
+
+export default defineComponent({
+  render() {
+    return h(&#39;div&#39;, &#39;Greet Component&#39;)
+  }
+})</code></pre>
+<p><code class="inline">Greet</code> is conditionally rendered when you click “Show Greeting”. This means we do not want to load the component until it is actually needed.</p>
+<p><code class="inline">App.ts</code> is like this:</p>
+<pre><code class="ts lang-ts language-ts">import { defineComponent, h, createApp, defineAsyncComponent } from &#39;vue&#39;
+
+const AsyncHello = defineAsyncComponent(() =&gt; import(&#39;./Hello&#39;))
+
+export const App = defineComponent({
+  name: &#39;App&#39;,
+
+  components: {
+    AsyncHello
+  },
+  
+  render() {
+    return h(&#39;div&#39;, [&#39;This is app&#39;, h(AsyncHello)])
+  }
+})
+
+window.addEventListener(&#39;DOMContentLoaded&#39;, () =&gt; {
+  const el = document.createElement(&#39;div&#39;)
+  el.id = &#39;app&#39;
+  document.body.appendChild(el)
+
+  createApp(App).mount(&#39;#app&#39;)
+})</code></pre>
+<p><code class="inline">Hello</code> is also asynchronous - this is kind of pointless, since we need it immeidately, but it helps drive home the bundle splitting we are about to do.</p>
+<p>Run <code class="inline">yarn webpack --mode=&quot;development&quot;</code>. You will see <code class="inline">dist</code> has three files:</p>
+<pre><code class=" lang- language-">$ ls dist
+Greet_ts.js Hello_ts.js index.js
+
+      Asset      Size
+Greet_ts.js  1.78 KiB  [emitted]
+Hello_ts.js  2.38 KiB  [emitted]
+   index.js   359 KiB  [emitted]  [name: index]</code></pre>
+<p><code class="inline">index.js</code> is big. It contains all of Vue - that’s why. <code class="inline">Greet_ts</code> and <code class="inline">Hello_ts</code> are small - they are tiny little components. Webpack is smart enough to not bundle Vue with them, since it is already in <code class="inline">index.js</code>.</p>
+<p>Here is my <code class="inline">index.html</code>:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+  &lt;script src=&quot;./dist/index.js&quot;&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>I ran a server server with <code class="inline">python3 -m http.server</code>. Visting localhost:8000, I get:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/async-components-ss-1.png" alt=""/></p>
+<p>Note the Network tab - we loaded <code class="inline">Hello_ts</code> individually. Cool. Now click “Show Greeting”:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/async-components-ss-2.png" alt=""/></p>
+<p>It only loaded the Greet component when it was needed! You can play around with the most robust “options” API to see what else it can do.</p>
+<h2>How about testing?</h2>
+<p>Testing will be easy or hard, depending on your setup. I’ve had good experience so far, with minimal problems. I have added some simple tests using async components to the latest version of Vue Test Utils - see them <a href="https://github.com/vuejs/vue-test-utils-next/pull/105/files">here</a>. An example is like this:</p>
+<pre><code class="ts lang-ts language-ts">it(&#39;works with options usage&#39;, async (done) =&gt; {
+  const Async = defineAsyncComponent({
+    loader: () =&gt;
+      new Promise&lt;any&gt;((res) =&gt; {
+        setTimeout(() =&gt; {
+          res({
+            template: &#39;&lt;div&gt;Async Component&lt;/div&gt;&#39;
+          })
+        }, 75)
+      }),
+    loadingComponent: {
+      template: &#39;&lt;div&gt;Loading Component&lt;/div&gt;&#39;
+    },
+    delay: 10
+  })
+
+  const Comp = defineComponent({
+    render() {
+      return h(&#39;div&#39;, [h(Async)])
+    }
+  })
+
+  const wrapper = mount(Comp)
+
+  setTimeout(() =&gt; {
+    expect(wrapper.html()).toContain(&#39;Loading Component&#39;)
+  }, 35)
+
+  setTimeout(() =&gt; {
+    expect(wrapper.html()).toContain(&#39;Async Component&#39;)
+    done()
+  }, 100)
+})</code></pre>
+<p>As you can see, we use <code class="inline">setTimeout</code> to ensure our expectations are running at the correct time. Even if you use webpack as your build tool and Jest as your test tool, things should still work the same, since Jest will just read and import files as needed, regardless of how you are bundling them with webpack.</p>
+<h2>Conclusion</h2>
+<p>Asynchronous components can be used to split your bundle and load components just before they are needed. You can easily transform an existing component to be asynchronous using <code class="inline">defineAsyncComponent</code> and returning an <code class="inline">import</code>, or use the options API to have more control. Loading components asychronously can improve performance, but it comes with added complexity. As always, weight up the pros and cons, and go for the most simple solution that satisfies your needs.</p>
+
+  </div>
+</body>
+</html>
