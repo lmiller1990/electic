@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200510 Vite the Fastest Development Environment Ever
+  </h1>
+
+  <div class="post_body">
+    <p>Today we explore Vite, an extremely fast development environment based on ES modules.</p>
+<p>You can find the source code and documentation for Vite <a href="https://github.com/vuejs/vite">here</a>.</p>
+<p>First, we will take a quick look at how ES modules work in a browser, with no build step to speak of, and build a simple clone of <a href="https://storybook.js.org/">Storybook</a>, a UI development environment that Vite is perfectly designed for. We will use Vue 3, Vite. Like the real storybook, it  will let you toggle between different stories using <code class="inline">vue-router</code>, and thanks to Vite, support TypeScript, JSX, sass and lightning-fast hot reload, with next to no configuration.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vitebook/master/ss2.png" alt=""/>
+<img src="https://raw.githubusercontent.com/lmiller1990/vitebook/master/ss3.png" alt=""/></p>
+<h2>Getting Started</h2>
+<p>All we will need is <code class="inline">vite</code> and the latest version of Vue 3:</p>
+<pre><code class="sh lang-sh language-sh">yarn add vite vue@next</code></pre>
+<p>One of the great things about Vite is how easy it is to get started! At this point, normally you’d create a <code class="inline">webpack.config.js</code>, install a slew of transformers and configure everything. Not with Vite. All you need is an <code class="inline">index.html</code>:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+
+  &lt;script type=&quot;module&quot;&gt;
+    import { greet } from &#39;/greet.js&#39;
+
+    greet()
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Create a <code class="inline">greet.js</code> while you are at it:</p>
+<pre><code class="js lang-js language-js">export const greet = () =&gt; console.log(&#39;Hello from ES modules!&#39;)</code></pre>
+<p>Before using Vite, run a regular HTTP server with python 3: <code class="inline">python -m http.server</code>. This is to emphasize what Vite is <em>not</em> doing - if you go to <code class="inline">http://localhost:8000</code> and look at the console. You will see <code class="inline">Hello from ES modules!</code>. Most modern browsers support ES module syntax without a build step, so this works fine. Vite relies on ES module support, part of why it has basically no configuration required, and why it’s so damn fast.</p>
+<h2>The Power of Vite</h2>
+<p>Let’s see some of the cool tricks Vite. Kill your python server and start Vite with <code class="inline">yarn vite</code>. Head to <code class="inline">http://localhost:3000</code> - your greeting should still be showing in the console. One thing ES modules does not support out of the box is importing from <code class="inline">node_modules</code> - Vite has you covered. Let’s create a simple Vue app:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+
+  &lt;script type=&quot;module&quot;&gt;
+    import { createApp, h } from &#39;vue&#39;
+    const App = {
+      render() {
+        return h(&#39;div&#39;, &#39;hello vite&#39;)
+      }
+    }
+    const app = createApp(App).mount(&#39;#app&#39;)
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Refresh the page - you should see <code class="inline">hello vite</code>. Great! Good, but there are other projects that do this, namely <a href="https://www.snowpack.dev/">snowpack</a>. So what else does Vite do?</p>
+<h2>Working with Vue components</h2>
+<p>Create an <code class="inline">App.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div style=&quot;color: blue&quot;&gt;
+    Count: {{ count }}
+    &lt;button @click=&quot;inc&quot;&gt;Increment&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { ref, reactive } from &#39;vue&#39;
+
+export default {
+  setup() {
+    const count = ref(0)
+    const inc = () =&gt; count.value++
+
+    return {
+      count,
+      inc,
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>And update <code class="inline">index.html</code></p>
+<pre><code class="html lang-html language-html">  &lt;script type=&quot;module&quot;&gt;
+    import { createApp, h } from &#39;vue&#39;
+    import App from &#39;/App.vue&#39;
+
+    const app = createApp(App).mount(&#39;#app&#39;)
+  &lt;/script&gt;</code></pre>
+<p>Head to your browser, hit <code class="inline">Increment</code> a few times, and update the <code class="inline">style=&quot;color: blue&quot;</code> to be something else. Save your code - notice the color changed, but the count remained the same? Hot reload! And it’s <em>fast</em> - perfect for something like storybook. I have no doubt we will see something like storybook using Vite, but faster and better, and hopefully without the React dependency.</p>
+<h2>Bells and Whistles</h2>
+<p>So we have <code class="inline">vue</code> files without and configuration - we also have <code class="inline">&lt;script lang=&quot;ts&quot;&gt;</code> as well - no configuration needed, Vite is very much batteries included here. For styling, <code class="inline">style lang=&quot;sass&quot;&gt;</code>, works too, all you you need to do is a quick <code class="inline">yarn add -D sass</code>.</p>
+<h2>A Simple Storybook Clone</h2>
+<p>Let’s build a simple storybook clone. To really feel just how fast Vite makes this sort of thing, you should either watch the screencast or follow along yourself. We are going to try out the latest beta of Vue Router, so install that with <code class="inline">yarn add vue-router@next</code>. Update <code class="inline">index.html</code>:</p>
+<pre><code class="html lang-html language-html">  &lt;script type=&quot;module&quot;&gt;
+    import { createApp, h } from &#39;vue&#39;
+    import { createRouter, createWebHistory } from &#39;vue-router&#39;
+    import App from &#39;/App.vue&#39;
+    import Stories from &#39;/Stories.vue&#39;
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        {
+          path: &#39;/:name?&#39;,
+          component: Stories,
+        }
+      ]
+    })
+
+    const app = createApp(App)
+    app.use(router)
+    app.mount(&#39;#app&#39;)
+  &lt;/script&gt;</code></pre>
+<p>Pretty simple - we set up a router to render a <code class="inline">&lt;Stories&gt;</code> component, which will make soon. <code class="inline">App.vue</code> will now just handle the router-view:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;RouterView /&gt;
+&lt;/template&gt;</code></pre>
+<p>Finally, create <code class="inline">Stories.vue</code> - see below for a quick explanation of what’s going on:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;
+    &lt;h1&gt;Stories&lt;/h1&gt;
+
+    &lt;div v-for=&quot;story in stories&quot; :key=&quot;story&quot;&gt;
+      &lt;RouterLink :to=&quot;`/${story}`&quot;&gt;
+        Stories of {{ story }}
+      &lt;/RouterLink&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { useRoute } from &#39;vue-router&#39;
+
+export default {
+  setup() {
+    const storyMap = {
+      button: {
+        name: &#39;button&#39;,
+        component: {}
+      },
+      card: {
+        name: &#39;card&#39;,
+        component: {}
+      }
+    }
+    const stories = Object.keys(storyMap)
+    const route = useRoute()
+
+    return {
+      storyMap,
+      stories,
+    }
+  },
+}
+&lt;/script&gt;</code></pre>
+<p>There is a bit going on here. If you haven’t tried out the new <code class="inline">vue-router</code>, you should! It has a hook based API, in additions to the classic API. We can get the current route with the <code class="inline">useRoute</code> hook - we will be using the <code class="inline">/:name</code> param to decide which story to render. We will store all the stories in an object, so it’s easy to access the one we want by doing <code class="inline">storyMap[useRoute().params.name]</code>. This will save us the effort of looping the array to find the current story.</p>
+<p>Refresh your page (Vite does not do hot reload on <code class="inline">index.html</code>, only JS/TS and Vue files). Now we have this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vitebook/master/ss1.png" alt=""/></p>
+<p>The links should also change the route correctly when clicked.</p>
+<h2>Rendering Stories</h2>
+<p>I created some basic stories to test things out. Go ahead an import them:</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+import { useRoute } from &#39;vue-router&#39;
+import ButtonStories from &#39;./Button.stories.vue&#39;
+import CardStories from &#39;./Card.stories.vue&#39;
+
+export default {
+  setup() {
+    const storyMap = {
+      button: {
+        name: &#39;button&#39;,
+        component: ButtonStories
+      },
+      card: {
+        name: &#39;card&#39;,
+        component: CardStories
+      }
+    }
+    const stories = Object.keys(storyMap)
+    const route = useRoute()
+
+    return {
+      storyMap,
+      stories,
+    }
+  },
+}
+&lt;/script&gt;</code></pre>
+<p>The final thing we need to do is render the current story based on the route. We can do this with a <code class="inline">computed</code> property:</p>
+<pre><code class="js lang-js language-js">const currentStory = computed(() =&gt; {
+  const story = storyMap[route.params.name]
+  if (story) {
+    return story
+  }
+})</code></pre>
+<p>Return this from the <code class="inline">setup()</code> function, and in the <code class="inline">&lt;template&gt;</code> use a dynamic component to render it:</p>
+<pre><code class="html lang-html language-html">&lt;div v-if=&quot;currentStory&quot;&gt;
+  &lt;h2&gt;Stories for {{ currentStory.name }}&lt;/h2&gt;
+  &lt;component :is=&quot;currentStory.component&quot; /&gt;
+&lt;/div&gt;</code></pre>
+<p>It works:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/vitebook/master/ss2.png" alt=""/>
+<img src="https://raw.githubusercontent.com/lmiller1990/vitebook/master/ss3.png" alt=""/></p>
+<p>Notice how this change is basically reflected in the browser immediately? Perfect for a UI prototyping environment - I’m excited for when someone (maybe me?) releases a storybook like project built on Vite.</p>
+<p>Try adding an extra color to the <code class="inline">colors</code> array in <code class="inline">Button.stories.vue</code> and see the browser update near instantly. Cool, right?</p>
+<h2>Discussion</h2>
+<p>While we built just touched on what Vite brings to the table, there is a lot more to be excited about. The real power here is because we are not using something like Webpack, that needs to transpile the entire project before updating the browser, Vite <strong>scales</strong>. No matter how many files you have in your project, the start-up and re-render time doesn’t change. It only loads the ES modules it needs, when they needed.</p>
+<p>For some perspective, one of the projects I work one uses React + TypeScript + storybook, with around 50 components + stories. Start-up takes around 30 seconds, and a few seconds to reflect changes in the browser. It might not seem like a lot, but when you are tweaking a UI ever so slightly, the near-instant feedback is a big deal.</p>
+<p>Other than storybook-like, UI driven applications, Evan has a prototype called <a href="https://github.com/vuejs/vitepress">Vitepress</a>, which is a static site generator like <a href="https://vuepress.vuejs.org/">Vuepress</a>, aimed at documentation. The real Vite is a good fit for this is it will only load the page you are currently looking at. Because Vuepress is webpack-based, in needs to watch and recompile everything to show you changes, something which can be very slow when you have a large amount of documentation. My book, the <a href="https://vuepress.vuejs.org/">Vue Testing Handbook</a>, only has around 20 pages, but still takes 5-6 seconds to start up, and 2-3 to reflect changes in the browser. It may not seem like a big difference (only a few seconds), but no-one has ever asked for more complex configuration, or for slower applications, right?</p>
+<h2>Conclusion</h2>
+<p>Vite is a lightning fast development environment, not unlike vue-cli, create-react-app, etc. Unlike those projects, it uses ES modules, which offloads a lot of complexity to the browser, and leads to faster reloads, and less need for configuration.</p>
+<p>While we use it with Vue here, it is framework agnostic - it comes with <a href="https://github.com/vuejs/vite#jsx">built-in JSX support</a>, and you can already use it with React and Preact today! The project is young, but looks poised to become a major competitor to webpack based development environments moving forward.</p>
+
+  </div>
+</body>
+</html>
