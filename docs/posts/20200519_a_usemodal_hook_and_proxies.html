@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200519 A useModal hook and Proxies
+  </h1>
+
+  <div class="post_body">
+    <p>While working on my course, The Composition API, a very clean abstraction for handling modals using the composition API emerged in the form of a <code class="inline">useModal</code> hook. In this article we will build it from the ground up. </p>
+<p>The final API will look something like this:</p>
+<pre><code class="ts lang-ts language-ts">// Installation
+const app = createApp(App)
+app.use(ModalPlugin)
+app.$mount(&#39;#app&#39;)</code></pre>
+<pre><code class="html lang-html language-html">&lt;!-- Usage --&gt;
+&lt;template&gt;
+  &lt;button @click=&quot;show&quot;&gt;show&lt;/button&gt;
+  &lt;teleport to=&quot;#modal-dest&quot; v-if=&quot;visible&quot;&gt;
+    &lt;modal-content-here /&gt;
+  &lt;/teleport&gt;
+&lt;/template
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &#39;vue&#39;
+import { useModal } from &#39;./modal&#39;
+
+export default defineComponent({
+  setup() {
+    const modal = useModal()
+
+    return {
+      showModal: modal.show(),
+      visible: modal.visible
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<h2>A simple <code class="inline">useModal</code> hook</h2>
+<p>Let’s start defining the hook. We will do this in a <code class="inline">vue</code> file - <code class="inline">Modal.vue</code>. Create a new component and add the following (there is a lot going on, I explain it directly underneath!)</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &quot;vue&quot;;
+
+const show = ref(false)
+
+export const useModal = () =&gt; {
+  return {
+    showModal() {
+      show.value = true
+    },
+    hideModal() {
+      show.value = false
+    },
+    visible() {
+      show.value
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p><code class="inline">useModal</code> returns an object with two functions. Two are just a nice public interface to show and hide the modal - and the final just returns whether the modal is current visible or not.</p>
+<p>This is far from an ideal implementation - we don’t want <code class="inline">visible</code> to be writable, for example - it would be cleaner to make this a read only property, as opposed to a writable <code class="inline">ref</code>. We will fix this later using <code class="inline">Proxy</code>, the ES6 construct that Vue 3 is built on top of. For now, we will focus on getting everything working then refactor.</p>
+<blockquote><p>Make it work, make it right, make it fast</p>
+</blockquote>
+<h2>The Modal Template</h2>
+<p>You can use whatever markup and styling you like. I am using <a href="https://bulma.io/">Bulma</a>, a simple CSS only framework. The markup for my modal is like this:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div class=&quot;modal&quot; :style=&quot;style&quot;&gt;
+    &lt;div class=&quot;modal-background&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;modal-content&quot;&gt;
+      &lt;div id=&quot;modal-dest&quot;&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;button class=&quot;modal-close is-large&quot; aria-label=&quot;close&quot; @click=&quot;hide&quot;&gt;&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</code></pre>
+<p>We haven’t created the <code class="inline">style</code> binding in the first <code class="inline">&lt;div&gt;</code> or the <code class="inline">hide</code> function in the <code class="inline">&lt;button&gt;</code>. Add those to the <code class="inline">&lt;script&gt;</code> under the <code class="inline">useModal</code> function:</p>
+<pre><code class="ts lang-ts language-ts">export default defineComponent({
+  setup() {
+    const modal = useModal()
+
+    const style = computed(() =&gt; {
+      return {
+        display: show.value ? &#39;block&#39; : &#39;none&#39;
+      }
+    })
+
+    return {
+      style,
+      hide: modal.hideModal,
+    }
+  }
+})</code></pre>
+<p>The Bulma modal overlay defaults to <code class="inline">display: none</code> and you make it visible by setting <code class="inline">display: block</code>. We accomplish this by binding to <code class="inline">show.value</code>.</p>
+<h2>The Modal Destination</h2>
+<p>You may have noticed the use of <code class="inline">&lt;teleport to=&quot;#modal-dest&quot;&gt;</code> right at the start - we need to create that destination now. This should be as high up the DOM tree as possible - we want the modal to overlay above everything else. We could ask the user to insert a <code class="inline">&lt;div id=&quot;modal&quot;&gt;</code> in their <code class="inline">index.html</code>, but it would be much cleaner if we could do it for them. Let’s do that.</p>
+<p>Let’s say <code class="inline">index.html</code> looks like this:</p>
+<pre><code class="html lang-html language-html">&lt;html&gt;
+  &lt;!-- ... ---&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+  &lt;/body&gt;
+  &lt;!-- ... ---&gt;
+&lt;/html&gt;</code></pre>
+<p>We will insert the <code class="inline">&lt;div id=&quot;modal&quot;&gt;</code> between <code class="inline">&lt;body&gt;</code> and <code class="inline">&lt;div id=&quot;app&quot;&gt;</code>.</p>
+<p>In a new file, <code class="inline">modal-plugin.ts</code>, add the following:</p>
+<pre><code class="ts lang-ts language-ts">export class ModalPlugin {
+  static install() {
+    const el = document.createElement(&#39;div&#39;)
+    el.id = &#39;modal&#39;
+    document.body.insertAdjacentElement(&#39;afterbegin&#39;, el)
+    const app = createApp(ModalApp).mount(&#39;#modal&#39;)
+  }
+}</code></pre>
+<p>We are making a new <code class="inline">&lt;div&gt;</code> for the modal - which is actually <em>another</em> Vue app - to mount on. We use <code class="inline">insertAdjacentElement(&#39;afterbegin&#39;)</code> to mount the modal app in between <code class="inline">&lt;body&gt;</code> and <code class="inline">&lt;div id=&quot;app&quot;&gt;</code>. <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentElement"><code class="inline">insertAdjacentElement</code></a> can insert different ways depending on the first argument, you can read more about it on MDN.</p>
+<p>Finally, head to <code class="inline">main.ts</code> (or the root of your app) and use the <code class="inline">ModalPlugin</code>. Mine looks like this:</p>
+<pre><code class="ts lang-ts language-ts">import { createApp } from &#39;vue&#39;
+import { ModalPlugin } from &#39;../modal-plugin&#39;
+
+import App from &#39;./App.vue&#39;
+
+const app = createApp(App)
+app.use(ModalPlugin)
+app.mount(&#39;#app&#39;)</code></pre>
+<p>And this should be enough to get everything working!</p>
+<h2>Improvements with Proxy</h2>
+<p>We can use a <code class="inline">Proxy</code> to only expose <code class="inline">visible</code> as a readonly property. This probably isn’t perfect (I am still learning the in and outs of <code class="inline">Proxy</code> as well), but it will still accomplishes what we want. Basically, when using a <code class="inline">Proxy</code>, you define what happens using <code class="inline">get</code> and <code class="inline">set</code> - in this case, we will not implement <code class="inline">set</code> at all, so the user cannot update <code class="inline">visible</code> by <code class="inline">visible.value = false</code>.</p>
+<p>We continue exposing <code class="inline">hideModal</code> and <code class="inline">showModal</code> as functions. The implementation is as follows:</p>
+<pre><code class="ts lang-ts language-ts">interface ModalApi {
+  hideModal: () =&gt; void
+  showModal: () =&gt; void
+  visible: boolean
+}
+
+export const useModal = (): ModalApi =&gt; {
+  return new Proxy&lt;ModalApi&gt;(Object.create(null), {
+    get(obj, prop) {
+      if (prop === &#39;visible&#39;) {
+        return computed(() =&gt; show.value)
+      }
+      if (prop === &#39;hideModal&#39;) {
+        return () =&gt; show.value = false
+      }
+      if (prop === &#39;showModal&#39;) {
+        return () =&gt; show.value = true
+      }
+    }
+  })
+}</code></pre>
+<p>A better implementation might be with <code class="inline">classes</code> and by using a <code class="inline">get</code> property on <code class="inline">visible</code> - however, I think this is a good opportunity to share a real use case for <code class="inline">Proxy</code>. A good exercise would be to rewrite this using a <code class="inline">class</code>. Something like:</p>
+<pre><code class="ts lang-ts language-ts">class ModalApi {
+  showModal() {
+    // ...
+  }
+
+  hideModal() {
+    // ...
+  }
+
+  get visible() {
+    // ...
+  }
+}</code></pre>
+<h2>Other Improvements</h2>
+<p>At the moment we will show <em>all</em> the modals in the entire application if <code class="inline">visible</code> is <code class="inline">true</code>. To support different modals, an additional flag specifying which modal is required. For example:</p>
+<pre><code class="ts lang-ts language-ts">modal.showModal({ id: &#39;signup&#39; })</code></pre>
+<p>You could use a unique id, or even pass the actual Component, then render it using a dynamic component. This would work something like this:</p>
+<pre><code class="ts lang-ts language-ts">modal.showModal({ component: Signup })
+
+&lt;template&gt;
+  &lt;component :is=&quot;modal.component&quot; /&gt;
+&lt;/template&gt;</code></pre>
+<p>There are many solutions - pick one that works best for your application.</p>
+<p>Another improvement would be to use a constant for the <code class="inline">&lt;teleport to&quot;...&quot;&gt;</code> and in the <code class="inline">&lt;Modal&gt;</code> component, since typing strings manually is error prone. For example:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;teleport :to=&quot;modalTarget&quot;&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+export default {
+  setup() {
+    const modal = useModal()
+
+    return {
+      modalTarget: modal.target // `modal.target could be &#39;#destination&#39; for example.
+  }
+}
+&lt;/script&gt;</code></pre>
+<h2>Conclusion</h2>
+<p>We build a <code class="inline">useModal</code> hook using <code class="inline">ref</code>, <code class="inline">computed</code> and a simple object in combination with <code class="inline">&lt;teleport</code>&gt;. We also explored how we can use <code class="inline">Proxy</code> for more fine-grained control over object access.</p>
+
+  </div>
+</body>
+</html>
