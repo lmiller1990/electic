@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200602 A modular form validation library for Vue
+  </h1>
+
+  <div class="post_body">
+    <p>Over the next few articles, I will be building a simple validation framework and integrating it with Vue. In doing so, I’ll discuss how I like to design libraries and the process I like to follow, while pointing to some other libraries which exhibit what I consider to be best practices.</p>
+<h2>Design Choices</h2>
+<p>I like to separate my business logic and UI logic as much possible. Since Vue a library for building user interfaces, anything that isn’t related to that should be kept separate. As such, when I build applications, I usually have two layers, each with their own set of responsibilities.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left">Layer</th><th style="text-align: left">Responsibility</th><th style="text-align: left">Language</th><th style="text-align: left">Tests</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left">Business</td><td style="text-align: left">Encapsulate the intelligence and complexity</td><td style="text-align: left">TypeScript</td><td style="text-align: left">Jest</td>
+</tr>
+<tr>
+<td style="text-align: left">UI</td><td style="text-align: left">Describe current state visually</td><td style="text-align: left">Vue, TypeScript</td><td style="text-align: left">Jest/Cypress</td>
+</tr>
+</tbody>
+</table>
+<p>There are several things I’d like to touch on here.</p>
+<h2>Business layer is pure TypeScript</h2>
+<p>When I’m writing a non-trivial app, this is where I spend about 80% of my time. Vue makes building UIs easy, so I don’t spend a lot of time there. It is also much easier to test complex business logic when it is decoupled from your framework. A validation framework, for example, is just validating whether strings, numbers of arrays meet some criteria.</p>
+<h2>The UI layer is just a representation of your business logic</h2>
+<p>Vue, and web UIs in general, are just one way to <strong>represent the state of your application</strong>. The vast majority of web apps are just a visualization of some data. In the validation framework example, we are visualizing the state of an input or form. The less intelligence in the Vue component, the less likely we are to have bugs.</p>
+<h2>API Design</h2>
+<p>With this in mind, let’s get started. This article focuses on the first layer - the business logic. The eventual goal is to build some generic, framework agnostic validations, then add a thin layer for Vue (and maybe other frameworks?) compatibility.</p>
+<p>For the business layer, I would like to model my forms using a simple object structure. A simple example might be:</p>
+<pre><code class="js lang-js language-js">const form = [
+  {
+    name: &#39;username&#39;,
+    value: &#39;&#39;,
+    rules: [
+      hasLength({ min: 5, max: 10 }),
+      isRequired()
+    ],
+  }
+]</code></pre>
+<p>No fancy stuff. The Vue integration could be a <code class="inline">useForm</code> or <code class="inline">createForm</code> function:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;v-input :rules=&quot;form.username.rules&quot; v-model=&quot;form.username.value&quot; /&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { hasLength, isRequired, vInput, useForm } from &#39;@some-validation-package/vue&#39;
+
+export default {
+  setup() {
+    const form = useForm([
+      {
+        name: &#39;username&#39;,
+        value: &#39;&#39;,
+        rules: [
+          hasLength({ min: 5, max: 10 }),
+          isRequired()
+        ],
+      }
+    ])
+
+    return {
+      form
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>You can see the API is more or less the same - we just pass our plain old data structure to the Vue integration layer, and let it figure out what to do.</p>
+<p>This unnamed framework should separate the validation rules from the Vue integration, so you can use it separately. You should be able to compose validations, which will allow composing complex validations from a handful of fundamental rules. Finally, the framework should be extendable; users can add their own rules or add-ons.</p>
+<p>For the Vue integration, or the UI layer, we will expose a style-less <code class="inline">&lt;v-input&gt;</code> that emits some useful events.</p>
+<h2>Defining the Types and Logic</h2>
+<p>Now we know what we are building, things are much easier! Let’s start defining some types and rules - to keep things simple, let’s start with <code class="inline">hasLength</code>, which will validate that the value has a minimum and maximum length. One simple implementation might be:</p>
+<pre><code class="ts lang-ts language-ts">interface LengthConstraints {
+  min: number
+  max: number
+}
+
+interface LengthRule {
+  type: &#39;length&#39;
+  constraints: LengthConstraints
+}
+
+export interface Status {
+  valid: boolean
+  message?: string
+}
+
+type Rule = LengthRule
+
+export const hasLength = (constraints: LengthConstraints): LengthRule =&gt; ({
+  type: &#39;length&#39;,
+  constraints
+})
+
+export function validate(value: string, rules: Rule[]): Status {
+  for (const rule of rules) {
+    if (rule.type === &#39;length&#39; &amp;&amp; value.length &gt; rule.constraints.max) {
+      return {
+        valid: false,
+        message: &#39;Value is too long&#39;,
+      }
+    }
+  }
+
+  return {
+    valid: true
+  }
+}</code></pre>
+<p>This is a minimal implementation that would work. You create a new rule by calling <code class="inline">hasLength({ min: 5, max: 10 })</code>, then whenever you want to validate the form, just call <code class="inline">validate</code>, and loop over rules. Ther is a problem, though - which we will see soon. Before we start changing the implementation, we should make sure this actually works with a test.</p>
+<pre><code class="ts lang-ts language-ts">import { hasLength, validate, Status } from &#39;./&#39;
+
+describe(&#39;validate&#39;, () =&gt; {
+  it(&#39;validates max length&#39; , () =&gt; {
+    const expected: Status = {
+      valid: false,
+      message: &#39;Value is too long&#39;
+    }
+    const actual = validate(&#39;aaaaa&#39;, [hasLength({ min: 0, max: 4 })])
+
+    expect(actual).toEqual(expected)
+  })
+})</code></pre>
+<h2>Making it Extendible</h2>
+<p>We need to address a design problem. By hardcoding the check for each rule inside the <code class="inline">validate</code> function, users will not be able to add their own validations - there would be no way to add additional conditionals to the <code class="inline">validate</code> function, if we shipping this as a module on npm. Instead, let’s move the validation check to the rule itself:</p>
+<pre><code class="ts lang-ts language-ts">interface LengthRule {
+  type: &#39;length&#39;
+  constraints: LengthConstraints
+  validator: (value: string) =&gt; Status
+}
+
+export type Rule = LengthRule
+
+export const hasLength = (constraints: LengthConstraints): LengthRule =&gt; ({
+  type: &#39;length&#39;,
+  constraints,
+  validator: (value: string) =&gt; {
+    if (value.length &gt; constraints.max) {
+      return {
+        valid: false,
+        message: &#39;Value is too long&#39;,
+      }
+    }
+
+    return {
+      valid: true
+    }
+  }
+})</code></pre>
+<p>Now the user can easily provide their own rules - they will just pass them into the <code class="inline">validate</code> function. Update <code class="inline">validate</code>:</p>
+<pre><code class="ts lang-ts language-ts">export function validate(value: string, rules: Rule[]): Status {
+  for (const rule of rules) {
+    const result = rule.validator(value)
+    if (!result.valid) {
+      return result
+    }
+  }
+
+  return {
+    valid: true
+  }
+}</code></pre>
+<p>Tests are still passing ✅ Adding the <code class="inline">min</code> rule is an exercise for the reader - see the repo for the implementation.</p>
+<h2>Discussion and Conclusion</h2>
+<p>We have not writte any Vue code yet, we have done the hard work in designing our API, and writing the business logic. We also saw two ways to implement the validation. The more extensible one is the one that takes the rules as arguments. By thinking our design through, we were able to come up with an API that satisfies all our goals before we wrote too much code.</p>
+<p>The next article will focus on building the integration layer between the validation business logic and Vue.</p>
+
+  </div>
+</body>
+</html>
