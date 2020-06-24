@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200624 Kanban Board with Typesafe GraphQL Part 2
+  </h1>
+
+  <div class="post_body">
+    <p>In part 2 of this series, we see how to add relationships in TypeORM, as well as load related data in an optimal manner, as well as add a simple express app on top of our well tested business logic.</p>
+<p>Let’s see how TypeORM handles relationships by adding categories to the view model. Update the definition for <code class="inline">RestProject</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface RestProject {
+  id: number
+  name: string
+  categories: Array&lt;{
+    id: number
+    name: string
+  }&gt;
+}</code></pre>
+<p>Then, update the test:</p>
+<pre><code class="ts lang-ts language-ts">import { createCategory } from &#39;../../../test/factories/categories&#39;
+
+// ...
+
+test(&#39;projectsViewModel&#39;, async () =&gt; {
+  const project = await createProject({ name: &#39;Test Project&#39; })
+  await createCategory({ name: &#39;Category&#39; }, project)
+  const expected: RestProject[] = [
+    {
+      id: project.id,
+      name: &#39;Test Project&#39;,
+      categories: [
+        {
+          id: 1,
+          name: &#39;Category&#39;
+        }
+      ]
+    }
+  ]
+
+  const actual = await projectViewModel()
+
+  expect(actual).toEqual(expected)
+})</code></pre>
+<p>And add <code class="inline">tests/factories/categories.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { DeepPartial, getRepository } from &#39;typeorm&#39;
+
+import { Category } from &#39;../../src/entity/Category&#39;
+import { Project } from &#39;../../src/entity/Project&#39;
+
+export const createCategory = (
+  category: DeepPartial&lt;Category&gt;,
+  project: Project
+) =&gt; {
+  return getRepository(Category).save({
+    name: category.name,
+    project_id: project.id
+  })
+}</code></pre>
+<p>We pass in the project as the second argument - <code class="inline">project_id</code> is a non-nullable column in the <code class="inline">categories</code> table, so we need to provide one. The test still won’t pass yet - read on.</p>
+<h2>TypeORM Relationships</h2>
+<p>TypeORM has a really nice API for relationships. We want to express the one project -&gt; many categories relationship, as well as the one category -&gt; one project relationship. In other words, a 1..n (one to many) and a 1..1 (one to one) relationship.</p>
+<p>Update <code class="inline">src/entities/Project.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from &#39;typeorm&#39;
+import { Category } from &#39;./Category&#39;
+
+@Entity({ name: &#39;projects&#39; })
+export class Project {
+
+  // ...
+
+  @OneToMany(type =&gt; Category, category =&gt; category.project)
+  categories: Category
+}</code></pre>
+<p>All we need to do is add the property with the relevant decorators, and we will be able to access the categories with <code class="inline">project.categories</code>. Create <code class="inline">src/entities/Category.ts</code> and add the inverse:</p>
+<pre><code class="ts lang-ts language-ts">import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from &#39;typeorm&#39;
+
+import { Project } from &#39;./Project&#39;
+
+@Entity({ name: &#39;categories&#39; })
+export class Category {
+  @PrimaryGeneratedColumn()
+  id: number
+
+  @Column()
+  name: string
+
+  @ManyToOne(type =&gt; Project, project =&gt; project.categories)
+  @JoinColumn({ name: &#39;project_id&#39; })
+  project: Project
+
+  @Column()
+  project_id: number
+}</code></pre>
+<p>Since we are not using the TypeORM default for the relationship (they use <code class="inline">projectId</code>), we need to specify the join column using the <code class="inline">JoinColumn</code> decorator.</p>
+<p>Finally, we can update the project view model and the test will pass:</p>
+<pre><code class="ts lang-ts language-ts">export const projectViewModel = async (): Promise&lt;Project[]&gt; =&gt; {
+  const query = await getRepository(Project)
+    .createQueryBuilder(&#39;project&#39;)
+    .innerJoinAndSelect(&#39;project.categories&#39;, &#39;categories&#39;)
+    .getMany()
+
+  return query.map(x =&gt; ({
+    id: x.id,
+    name: x.name,
+    categories: x.categories.map(y =&gt; ({ id: y.id, name: y.name }))
+  }))
+}</code></pre>
+<h2>Adding the Controller and HTTP Server</h2>
+<p>All the hard work is done, and we have 100% test coverage. Now we just need a way to expose it to the outside world. Add express, and in <code class="inline">src/rest</code> create <code class="inline">projects.ts</code> and <code class="inline">index.ts</code>. <code class="inline">projects.ts</code> will house the endpoint:</p>
+<pre><code class="ts lang-ts language-ts">import { Request, Response } from &#39;express&#39;
+
+import { projectViewModel } from &#39;../viewModels/projects&#39;
+
+export const projects = async (req: Request, res: Response) =&gt; {
+  const vm = await projectViewModel()
+  res.json(vm)
+}</code></pre>
+<p>Simple stuff, not much to explain. Finally in <code class="inline">src/rest/index.ts</code> add a little express app (and note this is where we create the database connection):</p>
+<pre><code class="ts lang-ts language-ts">import * as express from &#39;express&#39;
+import { createConnection } from &#39;typeorm&#39;
+
+import { projects } from &#39;./projects&#39;
+
+(async () =&gt; {
+  await createConnection()
+  const app = express()
+  app.use(&#39;/projects&#39;, projects)
+  app.listen(5000, () =&gt; console.log(&#39;Listening on port 5000&#39;))
+})()</code></pre>
+<p>Run this however you like - I just like to use <code class="inline">ts-node</code> and run <code class="inline">yarn ts-node src/rest/index.ts</code>. You can curl it and see the following:</p>
+<pre><code class="sh lang-sh language-sh">$ curl http://localhost:5000/projects | json_pp
+
+[
+   {
+      &quot;categories&quot; : [
+         {
+            &quot;id&quot; : 1,
+            &quot;name&quot; : &quot;Ready to develop&quot;
+         }
+      ],
+      &quot;id&quot; : 1,
+      &quot;name&quot; : &quot;Test&quot;
+   }
+]</code></pre>
+<p>If you go to <code class="inline">ormconfig.json</code> and set “logging: true”, you can see the SQL that is executed:</p>
+<pre><code class="sh lang-sh language-sh">$ yarn ts-node src/rest/index.ts
+yarn run v1.22.4
+$ /Users/lachlan/code/dump/rest-graphql-kanban/node_modules/.bin/ts-node src/rest/index.ts
+Listening on port 5000
+
+query: SELECT &quot;project&quot;.&quot;id&quot; AS &quot;project_id&quot;, &quot;project&quot;.&quot;name&quot; AS &quot;project_name&quot;, &quot;categories&quot;.&quot;id&quot; AS &quot;categories_id&quot;, &quot;categories&quot;.&quot;name&quot; AS &quot;categories_name&quot;, &quot;categories&quot;.&quot;projectId&quot; AS &quot;categories_projectId&quot; FROM &quot;projects&quot; &quot;project&quot; INNER JOIN &quot;categories&quot; &quot;categories&quot; ON &quot;categories&quot;.&quot;projectId&quot;=&quot;project&quot;.&quot;id&quot;</code></pre>
+<p>You can see we get the projects and categories in a single query - this is important to remember, since we want to avoid the N+1 problem when we implement the GraphQL server!</p>
+<p>Implementing the <code class="inline">tasks</code> and <code class="inline">categories</code> view models and endpoints is no different to <code class="inline">projects</code>, so I will leave that as an exercise. You can find the full implementation in the <a href="https://github.com/lmiller1990/graphql-rest-vue">source code</a>.</p>
+<h2>Conclusion</h2>
+<p>This post covered:</p>
+<ul>
+<li>TypeORM relationships
+</li>
+<li>implementing a REST API
+</li>
+<li>separating core logic via a view model layer to make it testable
+</li>
+<li>creating factories to support tests
+</li>
+<li>two techniques to eagerly load related data
+</li>
+</ul>
+<p>The next posts will look at a GraphQL server, and the Vue front-end.</p>
+
+  </div>
+</body>
+</html>
