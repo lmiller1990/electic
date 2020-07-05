@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200705 Kanban Board with Typesafe GraphQL Part 3
+  </h1>
+
+  <div class="post_body">
+    <p>In the previous two articles, we looked at how to use TypeORM and Express to create a REST API in a modular, testable fashion. This was in preparation for our real goal: a GraphQL server.</p>
+<p>To build a GraphQL server and get a great TypeScript experience, we need a few libraries.</p>
+<p>You can find the source code for this article <a href="https://github.com/lmiller1990/graphql-rest-vue">here</a>.</p>
+<ul>
+<li><a href="https://github.com/graphql/express-graphql"><code class="inline">express-graphql</code></a> and <code class="inline">graphql</code>. <code class="inline">graphql</code> is a <strong>JavaScript</strong> implementation of GraphQL. <code class="inline">express-graphql</code> just wraps it nicely for us.
+</li>
+<li><a href="https://github.com/MichalLytek/type-graphql"><code class="inline">type-graphql</code></a>. This will give us some decorators we can use to bridge the gap from GraphQL schema and our ORM (TypeORM in this case).
+</li>
+</ul>
+<p>I don’t normally like to use too many libraries, but this is the best combination of libraries I’ve found to work with GraphQL and TypeScript.</p>
+<p>The goal will to be have a single endpoint, from which we can query for projects, tasks and categories:</p>
+<pre><code class="json lang-json language-json">{
+  projects(id: 1) {
+    tasks {
+      id
+      name
+      category {
+        id
+      }
+    }
+  }
+}</code></pre>
+<p>Let’s get started!</p>
+<h2>type-graphql Decorators</h2>
+<p>One of the nice things about <code class="inline">type-graphql</code> is it also uses a decorator based API, which fits well with TypeORM. The first thing we need to do is specify which classes and fields are going to be exposed via our Graph API. For now, let’s just update <code class="inline">Project</code> and <code class="inline">Category</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from &#39;typeorm&#39;
+import { Field, ID, ObjectType } from &#39;type-graphql&#39;
+import { Category } from &#39;./Category&#39;
+
+@ObjectType()
+@Entity({ name: &#39;projects&#39; })
+export class Project {
+  @Field(type =&gt; ID)
+  @PrimaryGeneratedColumn()
+  id: number
+
+  @Field()
+  @Column()
+  name: string
+
+  @Field(type =&gt; [Category])
+  @OneToMany(type =&gt; Category, category =&gt; category.project)
+  categories: Category[]
+}</code></pre>
+<p>I imported <code class="inline">Field</code>, <code class="inline">ID</code>, and <code class="inline">ObjectType</code> from <code class="inline">type-graphql</code> and applied them in the same way I applied the TypeORM decorators. They are written in a similar fashion to the TypeORM decorators - specifically, they take a callback which has one argument, usually named <code class="inline">type</code>, which specifies the type. Instead of <code class="inline">Category[]</code>, to specify an array we write the <code class="inline">[Category]</code> syntax. <code class="inline">ObjectType</code> is a bit of an ambiguous name; <code class="inline">GraphQLObject</code> would probably be more clear. Naming is tough, I guess? <code class="inline">Category</code> looks similar:</p>
+<pre><code class="ts lang-ts language-ts">import { ObjectType, Field, ID } from &#39;type-graphql&#39;
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from &#39;typeorm&#39;
+import { Project } from &#39;./Project&#39;
+
+@ObjectType()
+@Entity({ name: &#39;categories&#39; })
+export class Category {
+  @Field(type =&gt; ID)
+  @PrimaryGeneratedColumn()
+  id: number
+
+  @Field()
+  @Column()
+  name: string
+
+  @Column({ name: &#39;project_id&#39; })
+  projectId: number
+
+  @ManyToOne(type =&gt; Project, project =&gt; project.categories)
+  @JoinColumn({ name: &#39;project_id&#39; })
+  project: Project
+}</code></pre>
+<h2>The GraphQL Endpoint</h2>
+<p>Before we work on the <strong>resolvers</strong>, which is analogous to the View Model from the REST endpoint we made, let’s create the GraphQL HTTP endpoint. I made a file called <code class="inline">src/graphql/index.ts</code>. There is a bit going on here - see below for an explanation.</p>
+<pre><code class="ts lang-ts language-ts">import &#39;reflect-metadata&#39;
+import { createConnection, useContainer } from &#39;typeorm&#39;
+import * as graphqlHTTP from &#39;express-graphql&#39;
+import * as express from &#39;express&#39;
+import { buildSchema } from &#39;type-graphql&#39;
+
+import { ProjectResolver } from &#39;./project.resolvers&#39;
+
+(async () =&gt; {
+  const connection = await createConnection()
+  const schema = await buildSchema({
+    resolvers: [ProjectResolver],
+    container: Container
+  })
+  const app = express()
+  app.use(&#39;/graphql&#39;, graphqlHTTP({
+    schema,
+    graphiql: true
+  }))
+  app.listen(4000)
+})()</code></pre>
+<p>The only part here actually required for a GraphQL server is <code class="inline">buildSchema</code> and the express app. The last thing we need before we see some GraphQL goodness is the <code class="inline">ProjectResolver</code>.</p>
+<h2>Creating the ProjectResolver</h2>
+<p>Resolvers in GraphQL are what takes in the query from the client, figures out what to load, and returns what the client asked for. In our case, they will run some SQL queries - same as the View Model from the REST API. Let’s see some code, and talk about it:</p>
+<pre><code class="ts lang-ts language-ts">import { Query, Resolver, Arg } from &#39;type-graphql&#39;
+import { InjectRepository } from &#39;typeorm-typedi-extensions&#39;
+import { Repository } from &#39;typeorm&#39;
+import { Project } from &#39;../entity/Project&#39;
+
+@Resolver(of =&gt; Project)
+export class ProjectResolver {
+
+  @Query(returns =&gt; [Project])
+  async projects(@Arg(&#39;id&#39;) id: number) {
+    const project = await this.repo.findOne(id)
+    if (!project) {
+      throw Error(`No project found for id ${id}`)
+    }
+    return project
+  }
+}</code></pre>
+<p>This is enough to get us up and running. Start your GraphQL server - I like to use <code class="inline">ts-node</code> in development. I run it in watch mode with <code class="inline">yarn ts-node-dev src/graphql/index.ts</code>. I can run a query by visiting <code class="inline">http://localhost:4000/graphql</code>:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/gql_part_3_ss_1.png" alt="" /></p>
+<p>Fun stuff! But we just tested by hand - let’s automate this a bit.</p>
+<h2>Writing a Resolver Test</h2>
+<p>The previous article covers most of this snippet, so let’s see the test first. You might try and do something like this we with REST endpoint:</p>
+<pre><code class="ts lang-ts language-ts">test(&#39;project resolver&#39;, async () =&gt; {
+  const project = await createProject({ name: &#39;Project&#39; })
+  const category = await createCategory({ name: &#39;Category&#39; }, project)
+
+  const expected = {
+    id: project.id,
+    name: &#39;Project&#39;,
+    categories: [
+      {
+        id: category.id,
+        name: &#39;Category&#39;
+      }
+    ]
+  }
+  const resolver = new ProjectResolver(repo)
+  const actual = await resolver.project(id: project.id)
+
+  expect(actual).toEqual(expected)
+})</code></pre>
+<p>This won’t work out too well for a number of reasons. Firstly, we are not loading the categories eagerly - so this would be failing. Even if we did, though, it is not as simple as just creating a new <code class="inline">ProjectResolver</code> and passing in the arguments - since we are using <code class="inline">type-graphql</code> decorators, to test the resolver as it behaves in production we need to create new <code class="inline">graphql</code> instance, similar to what we do in <code class="inline">src/graphql/index.ts</code>. Before doing this, however, we need a few prerequisites:</p>
+<ul>
+<li>create a database connection
+</li>
+<li>create a graphql instance
+</li>
+</ul>
+<p>Update the test to use a <code class="inline">graphql</code> instance, and query it like we did in the GraphiQL UI. It’s a lot of code - this is closer to an end to end, or integration test, than a unit test. That’s fine - not everything has to be super granular or modular. This way, we get more coverage, and we are testing in a similar manner to production.</p>
+<pre><code class="ts lang-ts language-ts">import { createConnection, Connection, getRepository, Repository } from &#39;typeorm&#39;
+import { Container } from &#39;typedi&#39;
+import { graphql } from &#39;graphql&#39;
+import { buildSchema } from &#39;type-graphql&#39;
+
+import { Project } from &#39;../../entity/Project&#39;
+import { createProject } from &#39;../../../test/factories/projects&#39;
+import { createCategory } from &#39;../../../test/factories/categories&#39;
+import { ProjectResolver } from &#39;../project.resolvers&#39;
+
+let connection: Connection
+let repo: Repository&lt;Project&gt;
+
+beforeAll(async () =&gt; {
+  connection = await createConnection()
+  repo = getRepository(Project)
+  await repo.remove(await repo.find())
+})
+
+afterAll(async () =&gt; {
+  await connection.close()
+})
+
+test(&#39;project resolver&#39;, async () =&gt; {
+  const project = await createProject({ name: &#39;Project&#39; })
+  const category = await createCategory({ name: &#39;Category&#39; }, project)
+
+  const expected = {
+    project: {
+      id: project.id.toString(),
+      name: &#39;Project&#39;,
+      categories: [
+        {
+          id: category.id.toString(),
+          name: &#39;Category&#39;
+        }
+      ]
+    }
+  }
+
+  const schema = await buildSchema({
+    resolvers: [ProjectResolver],
+    container: Container
+  })
+
+  const actual = await graphql({
+    schema,
+    source: `
+      {
+        project(id: ${project.id}) {
+          id
+          name
+          categories {
+            id
+            name
+          }
+        }
+      }
+    `
+  })
+
+  expect(actual.data).toEqual(expected)
+})</code></pre>
+<p>I discuss more about query optimization in the accompanying screencast. Check it out!</p>
+<h2>Conclusion</h2>
+<p>This article covered a lot of content:</p>
+<ul>
+<li>setting up a GraphQL server using <code class="inline">type-graphql</code>, TypeORM and some utils
+</li>
+<li>Jest <code class="inline">setupFiles</code>
+</li>
+<li>Querying a GraphQL endpoint
+</li>
+</ul>
+<p>In the next article and screencast we will start building the front-end using Vue.js 3, powered by our GraphQL endpoint.</p>
+
+  </div>
+</body>
+</html>
