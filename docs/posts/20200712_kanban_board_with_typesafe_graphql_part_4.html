@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200712 Kanban Board with Typesafe GraphQL Part 4
+  </h1>
+
+  <div class="post_body">
+    <p>The first three parts of this series focused on building the back-end - now we move onto the frontend! </p>
+<p>Note: if you are following along, I extended the <code class="inline">ProjectResolver</code> a little bit since the previous article, so check out the GitHub repository to get the latest changes. You can find the <a href="https://github.com/lmiller1990/graphql-rest-vue">source code here</a>.</p>
+<p>This article will focus on querying the API from the Vue app, building the select project dropdown, and a reactive store. As a reminder, the goal is a Kanban board like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/graphql-rest-vue/develop/SS1.png" alt="" /></p>
+<h2>Setting up Vite</h2>
+<p>I will use <a href="https://github.com/vitejs/vite">Vite</a>, as opposed to the vue-cli, to develop the frontend. It’s much faster and has TypeScript support out of the box. Install it with <code class="inline">yarn add vite --dev</code>. Since <code class="inline">vite</code> is designed for loading ES modules, and for frontend development, some of the existing dependencies will cause problems. Move <em>all</em> the existing dependencies to <code class="inline">devDependencies</code>. For more information on why, see the accompanying <a href="https://vuejs-course.com/screencasts">screencast</a>.</p>
+<p>I created a new file at the root of the project, <code class="inline">index.html</code> with the following:</p>
+<pre><code class="html lang-html language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+  &lt;title&gt;Kanban&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+  &lt;script type=&quot;module&quot; src=&quot;/src/main.ts&quot;&gt;
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Note that Vite can load TypeScript out of the box. Great! In <code class="inline">src/frontend/main.ts</code>, create a new Vue app:</p>
+<pre><code class="ts lang-ts language-ts">import { createApp } from &#39;vue&#39;
+import App from &#39;./App.vue&#39;
+
+const app = createApp(App)
+app.mount(&#39;#app&#39;)</code></pre>
+<p><code class="inline">App.vue</code> is pretty simple, too:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div&gt;App&lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &#39;vue&#39;
+
+export default defineComponent({
+  setup() {
+  }
+})
+&lt;/script&gt;</code></pre>
+<h2>Loading Data</h2>
+<p>The next thing is to load all the <code class="inline">projects</code>. I would normally use <code class="inline">axios</code> for this, but <code class="inline">axios</code> does not appear to have an ES build, so it won’t work with Vite without some extra work. Instead, I will use <code class="inline">window.fetch</code>. The next question is how will we store the data? We could use the component local state, since this app is simple, but in my experience as apps grow, you need some kind of store. Let’s make a simple one using Vue’s new reactivity system.</p>
+<h2>A Simple Store</h2>
+<p>I will make a simple store. It will live in <code class="inline">src/frontend/store.ts</code>. I have also defined <code class="inline">SelectProject</code> interface, which will be used in the dropdown to select a project. <code class="inline">src/frontend/types.ts</code> looks like this:</p>
+<pre><code class="ts lang-ts language-ts">export interface SelectProject {
+  id: string
+  name: string
+}</code></pre>
+<p>The store is like this:</p>
+<pre><code class="ts lang-ts language-ts">import { reactive } from &#39;vue&#39;
+import { SelectProject } from &#39;./types&#39;
+
+interface State {
+  projects: SelectProject[]
+}
+
+function initialState(): State {
+  return {
+    projects: []
+  }
+}
+
+class Store {
+  protected state: State
+
+  constructor(init: State = initialState()) {
+    this.state = reactive(init)
+  }
+
+  getState(): State {
+    return this.state
+  }
+
+  async fetchProjects() {
+    // fetch posts...
+  }
+}
+
+export const store = new Store()</code></pre>
+<p>The store is powered by Vue’s new <code class="inline">reactive</code> function, which makes an object reactive. We also define the initial state to have a <code class="inline">projects</code> array, which will store the projects for the dropdown. How categories and tasks will be stored will be discussed later - for now we are just focusing on letting the user select a project.</p>
+<p>Another improvement that will come in the future is to use <code class="inline">provide</code> and <code class="inline">inject</code> instead of exporting the store instance directly from the store. Stay tuned!</p>
+<h2>Adding CORS</h2>
+<p>During development, we will have two servers: the graphql server and the Vite dev server. To allow cross origin requests, we need to enable CORS. I did this in <code class="inline">src/graphql/index.ts</code> using the <code class="inline">cors</code> package:</p>
+<pre><code class="ts lang-ts language-ts">// ...
+import * as express from &#39;express&#39;
+import * as cors from &#39;cors&#39;
+
+(async() =&gt; {
+  // ...
+
+  const app = express()
+  app.use(cors())
+  // ...
+
+  app.listen(4000)
+})()</code></pre>
+<h2>Making a GraphQL Request with <code class="inline">fetch</code></h2>
+<p>You can use a library like <code class="inline">vue-apollo</code> to manage your GraphQL requests, but I’d like to keep things simple for this example. We will just use <code class="inline">fetch</code>. Update the store’s <code class="inline">fetchProjects</code> function</p>
+<pre><code class="ts lang-ts language-ts">async fetchProjects() {
+  const response = await window.fetch(&#39;http://localhost:4000/graphql&#39;, {
+    method: &#39;POST&#39;,
+    headers: {
+      &#39;Content-Type&#39;: &#39;application/json&#39;
+    },
+    body: JSON.stringify({
+      query: `
+      {
+        projects {
+          id
+          name
+        }
+      }`
+    })
+  })
+  const result: { data: { projects: SelectProject[] } } = await response.json()
+  this.state.projects = result.data.projects
+}</code></pre>
+<p>Unfortunately <code class="inline">fetch</code> does not have the nice generic types <code class="inline">axios</code> does, so we need to type the request manually. No big deal.</p>
+<h2>The Select Project Dropdown</h2>
+<p>Create a new component <code class="inline">&lt;select-project&gt;</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select&gt;
+    &lt;option v-for=&quot;project in projects&quot; :key=&quot;project.id&quot;&gt;
+      {{ project.name }}
+    &lt;/option&gt;
+  &lt;/select&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &#39;vue&#39;
+import { SelectProject } from &#39;./types&#39;
+
+export default defineComponent({
+  props: {
+    projects: {
+      type: Array as () =&gt; SelectProject[]
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>And use it in <code class="inline">App.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select-project :projects=&quot;projects&quot; /&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, computed } from &#39;vue&#39;
+import { store } from &#39;./store&#39;
+import SelectProject from &#39;./SelectProject.vue&#39;
+
+export default defineComponent({
+  components: {
+    SelectProject
+  },
+
+  setup() {
+    return {
+      projects: computed(() =&gt; store.getState().projects)
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Importing the <code class="inline">store</code> instance is not ideal - the next article will show how to use dependency injection with <code class="inline">provide</code> and <code class="inline">inject</code>.</p>
+<h2>Conclusion</h2>
+<p>Although we just rendered a dropdown, which might not seem like much, we have set ourselves up for success by creating a store which will let our app scale, and are fetching the projects using <code class="inline">fetch</code> from our GraphQL API. The next step is allowing the user to select a project, which will load the categories and tasks, as well as making our store implementation more robust with <code class="inline">provide</code> and <code class="inline">inject</code>.</p>
+
+  </div>
+</body>
+</html>
