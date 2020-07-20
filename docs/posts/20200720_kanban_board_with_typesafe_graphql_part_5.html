@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200720 Kanban Board with Typesafe GraphQL Part 5
+  </h1>
+
+  <div class="post_body">
+    <p>In this article, we continue building our the front-end of kanban board. We previously added the ability to select a project; now we need to fetch the relevant categories and tasks, store the data somewhere in our store, and render a column for each category!</p>
+<p>The first thing we need to do is update our <code class="inline">&lt;SelectProject&gt;</code> component to use <code class="inline">v-model</code>, so we know when a project was selected. Vue.js 3 changes how <code class="inline">v-model</code> works slightly, but the idea is the same. The main different is the value is received is a <code class="inline">modelValue</code> prop, instead of <code class="inline">value</code> and you need to emit a <code class="inline">update:modelValue</code> event, instead of an <code class="inline">input</code> event.</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select data-testid=&quot;select-project&quot; :value=&quot;modelValue&quot; @change=&quot;change&quot;&gt;
+    &lt;option :value=&quot;null&quot;&gt;Select project&lt;/option&gt;
+    &lt;option v-for=&quot;project in projects&quot; :key=&quot;project.id&quot; :value=&quot;project.id&quot;&gt;
+      {{ project.name }}
+    &lt;/option&gt;
+  &lt;/select&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &#39;vue&#39;
+import { SelectProject } from &#39;./types&#39;
+
+export default defineComponent({
+  props: {
+    modelValue: {
+      type: String
+    },
+    projects: {
+      type: Array as () =&gt; SelectProject[]
+    }
+  },
+  setup(props, ctx) {
+    const change = (e) =&gt; {
+      if (e.target.value) {
+        ctx.emit(&#39;update:modelValue&#39;, e.target.value)
+      }
+    }
+    return {
+      change
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>The changes I’ve made are highlighted. Now we can use the component with <code class="inline">v-model</code> in <code class="inline">App.vue</code>. I will also use <code class="inline">watch</code> to fetch the relevant project data whenever the selected project changes (we will implement the <code class="inline">fetchProject</code> function next):</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selected&quot; /&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, computed, ref, watch } from &#39;vue&#39;
+import { store } from &#39;./store&#39;
+import SelectProject from &#39;./SelectProject.vue&#39;
+
+export default defineComponent({
+  components: {
+    SelectProject
+  },
+
+  setup() {
+    store.fetchProjects()
+    const selected = ref()
+    watch(selected, val =&gt; {
+      store.fetchProject(val)
+    })
+
+    return {
+      projects: computed(() =&gt; store.getState().projects),
+      selected
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<h2>Defining the Store State</h2>
+<p>Now we need to fetch the categories and tasks. We have already got an endpoint for that, so we just need to decide how we will store the data. If this project was going to grow much larger, I would probably create a separate for for <code class="inline">tasks</code>. Some kanban boards, like Jira, allow you to move tasks between projects, so nesting the tasks under a project might not be ideal. I’d also consider organizing my flux store with something like <a href="https://github.com/lmiller1990/flux-entities">flux-entities</a>. </p>
+<p>For this series, however, we will keep things simple and as such just nest the categories and tasks under a single <code class="inline">currentProject</code> field in the store. This will give us some duplication: we will have the current project <code class="inline">id</code> and <code class="inline">name</code> in both <code class="inline">projects</code> and <code class="inline">currentProjects</code>, however I think it is acceptable for a small application such as this one.</p>
+<p>Define some new types in <code class="inline">types.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface Task {
+  id: string
+  name: string
+  categoryId: string
+}
+
+interface Category {
+  id: string
+  name: string
+}
+
+interface CurrentProject {
+  id: string
+  name: string
+  categories: Category[]
+  tasks: Record&lt;string, Task&gt;
+}
+
+interface FetchProject {
+  project: {
+    id: string
+    name: string
+    categories: Array&lt;{
+      id: string
+      name: string
+    }&gt;
+    tasks: Array&lt;{
+      id: string
+      name: string
+    }&gt;
+  }
+}</code></pre>
+<p>Notice <code class="inline">categories</code> is an array and <code class="inline">tasks</code> is an object. I see the need to access a single task frequently, such as when we implement drag and drop, or perhaps we want to show a modal when a task is clicked.</p>
+<p>In these cases, I don’t want to loop over and array to find my task, which is an <code class="inline">O(n)</code> operation (not that it matters in this tiny app), as opposed to an <code class="inline">O(1)</code> operation, which we get using an object. Basically, I see myself doing <code class="inline">tasksMap[id]</code> more often than I see myself looping over all the tasks, so a key value map (using an object) makes sense here.</p>
+<p>I could use a similar approach for <code class="inline">categories</code> as well; that said, I think an array will be more simple here, so I am going with that. I would likely use key value map (the <code class="inline">Record</code> type in TypeScript) if I saw the app growing more complex, for the same reason; I think I’ll be looking up a single category more often than looping over them all.</p>
+<p>I also added a <code class="inline">FetchProject</code> interface. This will be the shape of the response from the graphql endpoint.</p>
+<h2>Fetching the Project Data</h2>
+<p>We can now implement <code class="inline">fetchProject</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface State {
+  projects: SelectProject[]
+  currentProject?: CurrentProject
+}
+
+// ...
+
+async fetchProject(id: string) {
+  const response = await window.fetch(&#39;http://localhost:4000/graphql&#39;, {
+    method: &#39;POST&#39;,
+    headers: {
+      &#39;Content-Type&#39;: &#39;application/json&#39;
+    },
+    body: JSON.stringify({
+      query: `
+      {
+        project(id: ${id}) {
+          id
+          name
+          categories {
+            id
+            name
+          }
+          tasks {
+            id
+            name
+          }
+        }
+      }`
+    })
+  })
+  const result: { data: FetchProject } = await response.json()
+  this.state.currentProject = {
+    id: result.data.project.id,
+    name: result.data.project.name,
+    categories: result.data.project.categories.map(x =&gt; ({ id: x.id, name: x.name })),
+    tasks: result.data.project.tasks.reduce((acc, curr) =&gt; acc[curr.id] = curr, {})
+  }
+}</code></pre>
+<p>I updated <code class="inline">State</code> to have an optional <code class="inline">currentProject</code> field. If it is <code class="inline">undefined</code>, we assume the project has not been fetched yet. <code class="inline">fetchProject</code> is very similar to the <code class="inline">fetchProjects</code> function from the previous article; there is a lot of duplication here, which could easily be refactored away. This would be a good exercise. We do some simple manipulating of the response to make it fit the <code class="inline">CurrentProject</code> interface.</p>
+<p>Now to render the categories! Add a <code class="inline">Category.vue</code> component:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div class=&quot;category&quot;&gt;
+    &lt;h4&gt;{{ category.name }}&lt;/h4&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &#39;vue&#39;
+import { Category } from &#39;./types&#39;
+
+export default defineComponent({
+  props: {
+    category: {
+      type: Object as () =&gt; Category
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.category {
+  background: silver;
+  width: 150px;
+  margin: 2px;
+  padding: 5px;
+  border-radius: 5px;
+}
+&lt;/style&gt;</code></pre>
+<p>Nothing much to see here. This is a UI component; it’s output is entirely based on its inputs (the <code class="inline">props</code> in this case) so it will be very easy to test. Update <code class="inline">App.vue</code> to use the <code class="inline">Category.vue</code> component:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selected&quot; /&gt;
+  &lt;div class=&quot;categories&quot;&gt;
+    &lt;category v-for=&quot;category in categories&quot; :key=&quot;category.id&quot; :category=&quot;category&quot; /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, computed, ref, watch } from &#39;vue&#39;
+import { store } from &#39;./store&#39;
+import SelectProject from &#39;./SelectProject.vue&#39;
+import Category from &#39;./Category.vue&#39;
+
+export default defineComponent({
+  components: {
+    SelectProject,
+    Category
+  },
+
+  setup() {
+    store.fetchProjects()
+    const selected = ref()
+    watch(selected, val =&gt; {
+      store.fetchProject(val)
+    })
+
+    return {
+      projects: computed(() =&gt; store.getState().projects),
+      selected,
+      categories: computed(() =&gt; store.getState().currentProject &amp;&amp; store.getState().currentProject.categories),
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.categories {
+  display: flex;
+}
+&lt;/style&gt;</code></pre>
+<p>And that’s enough to get our columns rendering, with the title of the category in each one! The last thing we need to do is render the tasks, which is easy, and implement drag and drop. Drag and drop is also relatively straight-forward. That will be the focus on the next article! We are in the home stretch.</p>
+<p>The app is getting fairly complex now, so it’s a good time to add a test. There is a fair bit going on here. The important parts are:</p>
+<ul>
+<li>Jest and jsdom do not have <code class="inline">window.fetch</code>: we are able to mock it by adding <code class="inline">fetch</code> to the <code class="inline">global</code> object
+</li>
+<li>We can use a <code class="inline">mockResponse</code> variable and change it during the test to simulate different responses from the graphql endpoint
+</li>
+<li>Both of our data fetching functions <code class="inline">fetchProject</code> and <code class="inline">fetchProjects</code> are marked as <code class="inline">async</code>; we need to use <code class="inline">flush-promises</code> to force those promises to resolve before the test continues
+</li>
+<li><code class="inline">flush-promises</code> is now exported from Vue Test Utils as of <code class="inline">2.0.0-beta.0</code>! Convinient.
+</li>
+</ul>
+<p>I go into more depth regarding this test in the accompanying screencast. Check it out!</p>
+<pre><code class="ts lang-ts language-ts">import { mount, flushPromises } from &#39;@vue/test-utils&#39;
+import App from &#39;../App.vue&#39;
+
+const projectsResponse = {
+  projects: [{
+    id: &#39;1&#39;,
+    name: &#39;Project 1&#39;,
+  }]
+}
+
+const projectResponse = {
+  project: {
+    id: &#39;1&#39;,
+    name: &#39;Project&#39;,
+    categories: [
+      { id: &#39;1&#39;, name: &#39;Category 1&#39; }
+    ],
+    tasks: []
+  }
+}
+
+let mockResponse
+
+describe(&#39;App&#39;, () =&gt; {
+  beforeAll(() =&gt; {
+    global[&#39;fetch&#39;] = (url: string) =&gt; ({
+      json: () =&gt; ({
+        data: mockResponse
+      })
+    })
+  })
+
+  afterAll(() =&gt; {
+    delete global[&#39;fetch&#39;]
+  })
+
+  it(&#39;renders categories&#39;, async () =&gt; {
+    mockResponse = projectsResponse
+    const wrapper = mount(App)
+    await flushPromises()
+
+    mockResponse = projectResponse
+    await wrapper.find(&#39;[data-testid=&quot;select-project&quot;]&#39;).setValue(&#39;1&#39;)
+    await flushPromises()
+
+    expect(wrapper.html()).toContain(&#39;Category 1&#39;)
+  })
+})</code></pre>
+<p>We could write some more tests for <code class="inline">Category</code> and <code class="inline">SelectProject</code>: I would do this if they got more complex. For now, I am happy to test everything in a single test, which gives me more coverage and is closer to what a user will be experiencing when they use the application. </p>
+<p>There are not really any edge cases for <code class="inline">SelectProject</code> or <code class="inline">Category</code>, since they are so simple, so I am confident to test the as part of the system in <code class="inline">App.vue</code>, as opposed to in isolation. The purpose of tests isn’t to test everything edge case, and every component in isolation, but to be confident in your application.</p>
+<p>You could actually use the real graphql server in this test, if you liked: you would need to figure out a way to use <code class="inline">setValue</code> without knowing hardcoding the project (you could just create it in <code class="inline">beforeAll</code> using the <code class="inline">createProject</code> function we defined for our back-end tests, and grab it from there, though). This might be a good exercise.</p>
+<h2>Conclusion</h2>
+<p>This article focused on rendering the columns for the kanban board. We covered</p>
+<ul>
+<li>new <code class="inline">modelValue</code> and <code class="inline">update:modelValue</code> syntax to use <code class="inline">v-model</code> with a component
+</li>
+<li>defined some additional types, forcing us to consider the data structures for our store
+</li>
+</ul>
+
+  </div>
+</body>
+</html>

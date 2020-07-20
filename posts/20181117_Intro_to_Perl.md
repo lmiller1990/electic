@@ -6,7 +6,7 @@ This article was published on 11/15/2018.
 
 Variables are pretty similar to most languages, with a few quirks:
 
-```pl
+```pl 1-2
 my $name; # scalar
 my @_private_names; # array
 my %Names_to_Addresses; # hash
