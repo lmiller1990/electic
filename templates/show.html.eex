@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <link rel="stylesheet" href="show.css">
   <link rel="stylesheet" href="prism.css">
-  <script src="prism.js"></script>
-  <script src="show.js"></script>
+  <link rel="stylesheet" href="prism-highlight.css">
   <title></title>
 </head>
 <body>
@@ -16,5 +15,8 @@
   <div class="post_body">
     <%= body %>
   </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
 </body>
 </html>

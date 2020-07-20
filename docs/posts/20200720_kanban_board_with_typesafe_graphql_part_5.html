@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <link rel="stylesheet" href="show.css">
   <link rel="stylesheet" href="prism.css">
-  <script src="prism.js"></script>
-  <script src="show.js"></script>
+  <link rel="stylesheet" href="prism-highlight.css">
   <title></title>
 </head>
 <body>
@@ -15,8 +14,9 @@
 
   <div class="post_body">
     <p>In this article, we continue building our the front-end of kanban board. We previously added the ability to select a project; now we need to fetch the relevant categories and tasks, store the data somewhere in our store, and render a column for each category!</p>
+    <img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/kanban-columns.png">
 <p>The first thing we need to do is update our <code class="inline">&lt;SelectProject&gt;</code> component to use <code class="inline">v-model</code>, so we know when a project was selected. Vue.js 3 changes how <code class="inline">v-model</code> works slightly, but the idea is the same. The main different is the value is received is a <code class="inline">modelValue</code> prop, instead of <code class="inline">value</code> and you need to emit a <code class="inline">update:modelValue</code> event, instead of an <code class="inline">input</code> event.</p>
-<pre><code class="html lang-html language-html">&lt;template&gt;
+<pre data-line="2-3,16-18,23-31"><code class="html lang-html language-html">&lt;template&gt;
   &lt;select data-testid=&quot;select-project&quot; :value=&quot;modelValue&quot; @change=&quot;change&quot;&gt;
     &lt;option :value=&quot;null&quot;&gt;Select project&lt;/option&gt;
     &lt;option v-for=&quot;project in projects&quot; :key=&quot;project.id&quot; :value=&quot;project.id&quot;&gt;
@@ -51,7 +51,7 @@ export default defineComponent({
 })
 &lt;/script&gt;</code></pre>
 <p>The changes I’ve made are highlighted. Now we can use the component with <code class="inline">v-model</code> in <code class="inline">App.vue</code>. I will also use <code class="inline">watch</code> to fetch the relevant project data whenever the selected project changes (we will implement the <code class="inline">fetchProject</code> function next):</p>
-<pre><code class="html lang-html language-html">&lt;template&gt;
+<pre data-line="2,16-25"><code class="html lang-html language-html">&lt;template&gt;
   &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selected&quot; /&gt;
 &lt;/template&gt;
 
@@ -121,7 +121,7 @@ interface FetchProject {
 <p>I also added a <code class="inline">FetchProject</code> interface. This will be the shape of the response from the graphql endpoint.</p>
 <h2>Fetching the Project Data</h2>
 <p>We can now implement <code class="inline">fetchProject</code>:</p>
-<pre><code class="ts lang-ts language-ts">interface State {
+<pre data-line="3, 8-38"><code class="ts lang-ts language-ts">interface State {
   projects: SelectProject[]
   currentProject?: CurrentProject
 }
@@ -191,7 +191,7 @@ export default defineComponent({
 }
 &lt;/style&gt;</code></pre>
 <p>Nothing much to see here. This is a UI component; it’s output is entirely based on its inputs (the <code class="inline">props</code> in this case) so it will be very easy to test. Update <code class="inline">App.vue</code> to use the <code class="inline">Category.vue</code> component:</p>
-<pre><code class="html lang-html language-html">&lt;template&gt;
+<pre data-line="3-5,30"><code class="html lang-html language-html">&lt;template&gt;
   &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selected&quot; /&gt;
   &lt;div class=&quot;categories&quot;&gt;
     &lt;category v-for=&quot;category in categories&quot; :key=&quot;category.id&quot; :category=&quot;category&quot; /&gt;
@@ -305,5 +305,8 @@ describe(&#39;App&#39;, () =&gt; {
 </ul>
 
   </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
 </body>
 </html>
