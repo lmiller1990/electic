@@ -159,7 +159,7 @@ export default defineComponent({
 
 Finally, our kanban board is starting to take shape:
 
-SS1
+![](https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/gql_part_6_ss_1.png)
 
 ## Drag and Drop
 
@@ -362,7 +362,7 @@ The final installment in this series looked at:
 
 - Implementing drag and drop.
 - Using a GraphQL mutation.
-- Further emphasised the importance of choosing a the right data structure - we saw how making `tasks` a key-value map made it trivial to update the category.
+- Further emphasised the importance of choosing the right data structure - we saw how making `tasks` a key-value map made it trivial to update the category.
 
 As of next week, I will return to the traditional format of self contained articles and screencasts. If you have any suggestions or requests, please let me know.
 

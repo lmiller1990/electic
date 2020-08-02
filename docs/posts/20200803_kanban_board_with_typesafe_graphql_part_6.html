@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200803 Kanban Board with Typesafe GraphQL Part 6
+  </h1>
+
+  <div class="post_body">
+    <p>In the sixth and final part of this series, we will implement drag and drop, as well as our first GraphQL mutation (as opposed to a query) to update data, rather than just fetching it.</p>
+<p>NOTE: if you are following along, I made some small changes to the app since part 5. Specifically, each task only belongs to 1 category, but I had set the relationship like this: <code class="inline">@OneToMany(type =&gt; Task, task =&gt; task.categories)</code>. I have since updated it to be <code class="inline">@OneToMany(type =&gt; Task, task =&gt; task.category)</code>, which is more semantically accurate. I had to update the relevant query in the flux store, as well as the test mock response. The actual behavior remains the same. I also updated the <code class="inline">create_schema.sql</code> script slightly. <a href="https://github.com/lmiller1990/graphql-rest-vue">Find the final version in the source code on GitHub</a>.</p>
+<h2>Rendering Tasks</h2>
+<p>We are rendering categories already, but no tasks. We do have those saved in the flux store, though, so let’s start by grabbing the correct tasks for each category. I will handle this in <code class="inline">App.vue</code>:</p>
+<pre data-line="8, 30-39, 53"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selectedProject&quot; /&gt;
+  &lt;div class=&quot;categories&quot;&gt;
+    &lt;category
+      v-for=&quot;category in categories&quot;
+      :key=&quot;category.id&quot;
+      :category=&quot;category&quot;
+      :tasks=&quot;getTasks(category)&quot;
+    /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, computed, ref, watch } from &#39;vue&#39;
+import { store } from &#39;./store&#39;
+import SelectProject from &#39;./SelectProject.vue&#39;
+import Category from &#39;./Category.vue&#39;
+import { Category as ICategory, Task } from &#39;./types&#39;
+
+export default defineComponent({
+  components: {
+    SelectProject,
+    Category
+  },
+
+  setup() {
+    store.fetchProjects()
+    const selectedProject = ref&lt;string&gt;()
+
+    const getTasks = (category: ICategory): Task[] =&gt; {
+      const tasks = computed(() =&gt; store.getState().currentProject?.tasks)
+      const myTasks: Task[] = []
+      for (const [id, task] of Object.entries(tasks.value)) {
+        if (task.categoryId === category.id) {
+          myTasks.push(task)
+        }
+      }
+      return myTasks
+    }
+
+    watch(selectedProject, id =&gt; {
+      if (!id) {
+         return
+      }
+
+      store.fetchProject(id)
+    })
+
+    return {
+      projects: computed(() =&gt; store.getState().projects),
+      categories: computed(() =&gt; store.getState().currentProject?.categories),
+      selectedProject,
+      getTasks
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.categories {
+  margin: 10px 0 0 0;
+  display: flex;
+}
+&lt;/style&gt;</code></pre>
+<p>I had to import the <code class="inline">Category</code> interface as <code class="inline">ICategory</code> since I also named my component <code class="inline">Category</code>. We also need to update <code class="inline">Category.vue</code> to render the tasks: I will do this by adding another component, <code class="inline">DraggableTask.vue</code> (which will be draggable in the near future!)</p>
+<p><code class="inline">Category.vue</code>:</p>
+<pre data-line="8, 16,19"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div class=&quot;category&quot;&gt;
+    {{ category.name }}
+
+    &lt;draggable-task
+      v-for=&quot;task in tasks&quot;
+      :key=&quot;task.id&quot;
+      :task=&quot;task&quot;
+    /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &quot;vue&quot;;
+import { Category, Task } from &quot;./types&quot;;
+import DraggableTask from &#39;./DraggableTask.vue&#39;
+
+export default defineComponent({
+  components: { DraggableTask },
+  props: {
+    category: {
+      type: Object as () =&gt; Category
+    },
+    tasks: {
+      type: Array as () =&gt; Task[]
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.category {
+  background: silver;
+  width: 150px;
+  margin: 2px;
+  padding: 5px;
+  min-height: 400px;
+  border-radius: 5px;
+}
+&lt;/style&gt;</code></pre>
+<p>And <code class="inline">DraggableTask.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div
+    class=&quot;task&quot;
+  &gt;
+    {{ task.name }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &quot;vue&quot;;
+import { Category, Task } from &quot;./types&quot;;
+export default defineComponent({
+  props: {
+    task: {
+      type: Object as () =&gt; Task
+    }
+  }
+})
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.task {
+  background: white;
+  color: black;
+  padding: 5px;
+  height: 40px;
+  border-radius: 8px;
+  margin: 5px 0;
+  cursor: move;
+}
+&lt;/style&gt;</code></pre>
+<p>Finally, our kanban board is starting to take shape:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/gql_part_6_ss_1.png" alt="" /></p>
+<h2>Drag and Drop</h2>
+<p>Implementing drag and drop is somewhat of a rite of passage for any front-end developer. Of course we could use a library, but in my experience, libraries are either too featureful and complex, or not featureful enough, or hard to modified to your liking. Since we only need a very simple implementation, we will just roll our own. Plus, it’s a great way to learn. Once we have drag and drop working, we will add the back-end code to persist the change in category.</p>
+<p>First, we need to make the <code class="inline">DraggableTask</code> draggable, and specify what happens when we start and stop dragging the element:</p>
+<pre data-line="4-7, 22-37"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div
+    class=&quot;task&quot;
+    draggable=&quot;true&quot;
+    @dragstart=&quot;dragstart&quot;
+    @dragend=&quot;dragend&quot;
+    :data-taskid=&quot;task.id&quot;
+  &gt;
+    {{ task.name }}
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, ref } from &quot;vue&quot;;
+import { Category, Task } from &quot;./types&quot;;
+export default defineComponent({
+  props: {
+    task: {
+      type: Object as () =&gt; Task
+    }
+  },
+  setup(props) {
+    const dragging = ref(false)
+    const dragstart = (e) =&gt; {
+      dragging.value = true
+      e.dataTransfer.setData(&#39;text/plain&#39;, JSON.stringify({
+        id: e.target.id,
+        taskid: props.task.id
+      }))
+    }
+    const dragend = (e) =&gt; {
+      dragging.value = false
+    }
+    return {
+      dragstart,
+      dragend
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Once you set an element to <code class="inline">draggable=&quot;true&quot;</code>, it will be draggable in the browser. Because we need some way to track which task is getting dragged and where it is dropped, we set that data with <code class="inline">dataTransfer</code> as a stringified JSON object.</p>
+<p>We are not actually using the <code class="inline">dragging</code> ref, but you could bind to this (for example with <code class="inline">:class</code> or <code class="inline">:style</code>) to visually indicate a task is in the dragging state (for example we could make the other tasks a bit more opace). This would probably be a better UX, however for the purpose of this article we will not be doing this - the goal is just to illustrate how to build the actual kanban board.</p>
+<p>The next thing we need to do is specify what happens when  the task is dropped. Update <code class="inline">Category.vue</code>:</p>
+<pre data-line="4-6, 33-47"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;div
+    class=&quot;category&quot;
+    @dragover.prevent
+    @drop.prevent=&quot;drop&quot;
+    data-dropzone=&quot;true&quot;
+  &gt;
+    {{ category.name }}
+
+    &lt;draggable-task
+      v-for=&quot;task in tasks&quot;
+      :key=&quot;task.id&quot;
+      :task=&quot;task&quot;
+    /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent } from &quot;vue&quot;;
+import { Category, Task } from &quot;./types&quot;;
+import DraggableTask from &#39;./DraggableTask.vue&#39;
+import { store } from &#39;./store&#39;
+export default defineComponent({
+  components: { DraggableTask },
+  props: {
+    tasks: {
+      type: Array as () =&gt; Task[]
+    },
+    category: {
+      type: Object as () =&gt; Category
+    }
+  },
+  setup(props) {
+    const drop = (e) =&gt; {
+      e.preventDefault()
+      const { id, taskid } = JSON.parse(e.dataTransfer.getData(&#39;text&#39;))
+      const draggableElement = document.querySelector(`[data-taskid=&quot;${taskid}&quot;]`)
+      const dropzone = e.target
+      if (dropzone.getAttribute(&#39;data-dropzone&#39;)) {
+        console.log(taskid, props.category.id)
+        dropzone.appendChild(draggableElement)
+        e.dataTransfer.clearData()
+      }
+    }
+    return {
+      drop
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>You need to specify both <code class="inline">@dragover.prevent</code> and <code class="inline">@drop.prevent</code> - see what happens if you don’t. We also add an event handler in <code class="inline">@drop.prevent</code> to handle updating the DOM. We do this in a very manual manner, as opposed to using Vue’s virtual DOM to update the DOM. Simple is best! We only want to let the user drop on a category element, so we do a check to ensure the <code class="inline">data-dropdone</code> attribute is present. Then we grab the DOM element and insert it into the category it was dropped on.</p>
+<p>We did it - you can now drag and drop tasks between categories. They won’t be persisted though - we need a new resolver, a <code class="inline">TaskResolver</code>, and a GraphQL mutation to do this.</p>
+<h2>Adding a TaskResolver</h2>
+<p>The <code class="inline">TaskResolver</code> we are going to make (in <code class="inline">src/graphql/task.resolvers.ts</code>) is very similar to the <code class="inline">ProjectResolver</code>, so we won’t go into too much detail. The main difference is we are now specifying the payload using an <code class="inline">InputType</code> decorator. To keep things simple, we will only support updating the <code class="inline">categoryId</code> for a task.</p>
+<pre><code class="ts lang-ts language-ts">import { Resolver, Arg, Mutation, InputType, Field, ID } from &#39;type-graphql&#39;
+import { getRepository } from &#39;typeorm&#39;
+import { Task } from &#39;../entity/Task&#39;
+
+@InputType(&#39;UpdateTask&#39;)
+class UpdateTask {
+  @Field(type =&gt; ID)
+  id: number
+
+  @Field(type =&gt; ID)
+  categoryId: number
+}
+
+@Resolver(of =&gt; Task)
+export class TaskResolver {
+
+  @Mutation(returns =&gt; Task)
+  async updatingTask(@Arg(&#39;task&#39;) updateTask: UpdateTask): Promise&lt;Task&gt; {
+    const { id, categoryId } = updateTask
+    const repo = getRepository(Task)
+    await repo.update({ id }, { categoryId })
+    return repo.findOne(id)
+  }
+}</code></pre>
+<p>Pretty straight forward. We receive a payload with a <code class="inline">id</code> (for the task) and a <code class="inline">categoryId</code> and update the relevant column using <code class="inline">update</code>. Then we returned the newly updated task.</p>
+<p>Don’t forget to add this to the root of our GraphQL server:</p>
+<pre data-line="1,8"><code class="ts lang-ts language-ts">import { TaskResolver } from &quot;./task.resolvers&quot;
+
+// ...
+
+(async() =&gt; {
+  await createConnection()
+  const schema = await buildSchema({
+    resolvers: [ProjectsResolver, TaskResolver]
+  })
+
+  // ...
+})()</code></pre>
+<p>We can now create a function in the store to make the request:</p>
+<pre><code class="ts lang-ts language-ts">class Store {
+  // ...
+  async updateTask(taskId: string, categoryId: string) {
+    const response = await window.fetch(&#39;http://localhost:4000/graphql&#39;, {
+      method: &#39;POST&#39;,
+      headers: {
+        &#39;Content-Type&#39;: &#39;application/json&#39;
+      },
+      body: JSON.stringify({
+        query: `
+        mutation {
+          updatingTask(task: {id: ${taskId}, categoryId: ${categoryId}}) {
+            category {
+              id
+            }
+          }
+        }
+        `
+      })
+    })
+    const result: { data: { updatingTask: { category: { id: string } } } } = await response.json()
+    store.getState().currentProject.tasks[taskId].categoryId = result.data.updatingTask.category.id
+  }
+}</code></pre>
+<p>We can see the benefit of saving the <code class="inline">tasks</code> as a non-nested entity - we can access and update the task just by referencing <code class="inline">tasks[taskId].categoryId</code>. If we had made <code class="inline">tasks</code> a nested array on <code class="inline">categories</code>, we would need to iterate the tasks on the old category, remove it, then add it to the new category. A lot of extra code and not nearly as performant, not to mention more code and more complexity leads to more bugs.</p>
+<p>This brings us to the end of this series. We did not write a test for the <code class="inline">TaskResolver</code>, nor the drag and drop. Writing a <code class="inline">TaskResolver</code> test is fairly trivial, and a good exercise. While you can test drag and drop with Vue Test Utils or Testing Library, I much prefer to test this kind of thing either with Cypress (so you can visual confirm it “looks” correct - drag and drop really needs to look good, not just “work”, to be useful) or even just test it by hand. I may look at some strategies for testing this kind of interaction in a future article if there is interest!</p>
+<h2>Conclusion</h2>
+<p>The final installment in this series looked at:</p>
+<ul>
+<li>Implementing drag and drop.
+</li>
+<li>Using a GraphQL mutation.
+</li>
+<li>Further emphasised the importance of choosing the right data structure - we saw how making <code class="inline">tasks</code> a key-value map made it trivial to update the category.
+</li>
+</ul>
+<p>As of next week, I will return to the traditional format of self contained articles and screencasts. If you have any suggestions or requests, please let me know.</p>
+<p><a href="https://github.com/lmiller1990/graphql-rest-vue">The final version of the source code is available here</a>.</p>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
