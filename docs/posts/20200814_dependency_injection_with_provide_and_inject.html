@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200814 Dependency Injection with Provide and Inject
+  </h1>
+
+  <div class="post_body">
+    <h1>Dependency Injection Provide Inject</h1>
+<p>Vue has a pair of functions, <code class="inline">provide</code> and <code class="inline">inject</code>, making it easy to utilize dependency injection, making it easy to have a globally accessible object (such as a router or a flux store) as well as making it easy to test components in isolation. Let’s see how <code class="inline">provide</code> and <code class="inline">inject</code> work with an example, some of the things to look out for, then upgrade an existing by writing a <code class="inline">useStore</code> composable to make a reactive store available in all the components.</p>
+<h2>A Simple Example</h2>
+<p>Let’s start with a simple example: an <code class="inline">A</code> component which renders a color, accessed via <code class="inline">provide</code>. We will use render functions, instead of a single file component, since that way we can write multiple components in a single file.</p>
+<pre><code class="ts lang-ts language-ts">import { provide, inject, h } from &#39;vue&#39;
+import { mount } from &#39;@vue/test-utils&#39;
+
+const A = {
+  setup () {
+    const color = inject(&#39;color&#39;)
+    return () =&gt; [
+      h(&#39;div&#39;, { id: &#39;a&#39; }, `Color is ${color}`)
+    ]
+  }
+}
+
+const App = {
+  setup() {
+    provide(&#39;color&#39;, &#39;red&#39;)
+    return () =&gt; [
+      h(A)
+    ]
+  }
+}
+
+test(&#39;dep. injection&#39;, () =&gt; {
+  const wrapper = mount(App)
+  console.log(wrapper.html())
+})</code></pre>
+<p>This renders <code class="inline">&lt;div id=&quot;a&quot;&gt;Color is red&lt;/div&gt;</code>. You might have noticed We are returning an Array from our render functions - this will render a fragment, something Vue 3 has no problem doing with, whether you are using a SFC or an inline render function. When you call <code class="inline">inject</code>, Vue will look for the nearest component above where <code class="inline">inject</code> was called and find the corresponding <code class="inline">provide</code>. If one isn’t found, you get a warning.</p>
+<p>In this case, we called <code class="inline">provide</code> in <code class="inline">App</code>, so everything works as expected. Let’s add another component, <code class="inline">B</code>, and see what else <code class="inline">provide</code> and <code class="inline">inject</code> can do:</p>
+<pre data-line="15-20"><code class="ts lang-ts language-ts">import { provide, inject, h } from &#39;vue&#39;
+import { mount } from &#39;@vue/test-utils&#39;
+
+const A = {
+  setup () {
+    const color = inject(&#39;color&#39;)
+    provide(&#39;color&#39;, &#39;blue&#39;)
+    return () =&gt; [
+      h(&#39;div&#39;, { id: &#39;a&#39; }, `Color is ${color}`),
+      h(B)
+    ]
+  }
+}
+
+const B = {
+  setup () {
+    const color = inject(&#39;color&#39;)
+    return () =&gt; h(&#39;div&#39;, { id: &#39;b&#39; }, `Color is ${color}`)
+  }
+}
+
+const App = {
+  setup() {
+    provide(&#39;color&#39;, &#39;red&#39;)
+    return () =&gt; [
+      h(A)
+    ]
+  }
+}
+
+test(&#39;dep. injection&#39;, () =&gt; {
+  const wrapper = mount(App)
+  console.log(wrapper.html())
+})</code></pre>
+<p>Now we get <code class="inline">&lt;div id=&quot;a&quot;&gt;Color is red&lt;/div&gt;&lt;div id=&quot;b&quot;&gt;Color is blue&lt;/div&gt;</code>. The reason <code class="inline">B</code> is rendering <code class="inline">blue</code> is because the nearest <code class="inline">provide</code> call, inside of <code class="inline">A</code>, sets <code class="inline">color</code> to <code class="inline">blue</code>. If this seems confusing, that’s because it is. You can imagine a large application with 10s or 100s of components - it might be difficult to track down where a specific value is provided. While <code class="inline">provide</code> and <code class="inline">inject</code> are pretty neat, use them sparingly.</p>
+<h2>A Real World Example</h2>
+<p>In some previous articles, I created a kanban board with a reactive store. The full <a href="https://github.com/lmiller1990/graphql-rest-vue">source code is here</a>, you probably will want to have a look at it as you read through this article to see the changes in context. </p>
+<p>You can find the first article in that series <a href="https://vuejs-course.com/blog/jira-kanban-board-with-typesafe-graphql-part-1">here</a>, and the article where I create the store <a href="https://vuejs-course.com/blog/jira-kanban-board-with-typesafe-graphql-part-4">here</a>. Let’s go ahead an upgrade that to use <code class="inline">provide</code> and <code class="inline">inject</code> to make the store available (I was simply doing <code class="inline">import { store } from &#39;./store&#39;</code>, which isn’t ideal for a few reasons). </p>
+<p>Before we make the change, let’s see <em>why</em> this is an improvement. I will first update the store, in <code class="inline">src/frontend/store.ts</code>:</p>
+<pre data-line="7, 13, 24-26"><code class="ts lang-ts language-ts">import { reactive, inject, provide } from &#39;vue&#39;
+import { SelectProject, CurrentProject, FetchProject } from &#39;./types&#39;
+
+interface State {
+  projects: SelectProject[]
+  currentProject?: CurrentProject
+  count: number
+}
+
+function initialState(): State {
+  return {
+    projects: [],
+    count: 0
+  }
+}
+
+export class Store {
+  protected state: State
+
+  constructor(init: State = initialState()) {
+    this.state = reactive(init)
+  }
+
+  increment() {
+    this.state.count += 1
+  }
+
+  // ...
+
+}
+
+export const store = new Store()</code></pre>
+<p>We have a basic <code class="inline">count</code> that can be updated with <code class="inline">increment</code>. Update <code class="inline">src/frontend/App.vue</code> to use those:</p>
+<pre data-line="3, 29, 34"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;select-project :projects=&quot;projects&quot; v-model=&quot;selectedProject&quot; /&gt;
+  Count: {{ count }}
+  &lt;div class=&quot;categories&quot;&gt;
+    &lt;category
+      v-for=&quot;category in categories&quot;
+      :key=&quot;category.id&quot;
+      :category=&quot;category&quot;
+      :tasks=&quot;getTasks(category)&quot;
+    /&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { defineComponent, computed, ref, watch } from &#39;vue&#39;
+import { store } from &#39;./store&#39;
+import SelectProject from &#39;./SelectProject.vue&#39;
+import Category from &#39;./Category.vue&#39;
+import { Category as ICategory, Task } from &#39;./types&#39;
+
+export default defineComponent({
+  components: {
+    SelectProject,
+    Category
+  },
+
+  setup() {
+    const store = useStore()
+    store.increment()
+
+    // ...
+
+    return {
+      count: computed(() =&gt; store.getState().count),
+      projects: computed(() =&gt; store.getState().projects),
+      categories: computed(() =&gt; store.getState().currentProject?.categories),
+      selectedProject,
+      getTasks
+    }
+  }
+})
+&lt;/script&gt;</code></pre>
+<p>Finally, add two tests to <code class="inline">src/frontend/App.spec.ts</code>:</p>
+<pre data-line="6-14"><code class="ts lang-ts language-ts">import { mount, flushPromises } from &#39;@vue/test-utils&#39;
+import App from &#39;./App.vue&#39;
+
+// ...
+
+test(&#39;App&#39;, async () =&gt; {
+  const wrapper = mount(App)
+  expect(wrapper.html()).toContain(&#39;Count: 1&#39;)
+})
+
+test(&#39;App&#39;, async () =&gt; {
+  const wrapper = mount(App)
+  expect(wrapper.html()).toContain(&#39;Count: 1&#39;)
+})</code></pre>
+<p>Yep - the same test, should both be passing, right? Wrong! Running these tests shows the first one passes, but the second one fails: the DOM now contains <code class="inline">Count: 2</code>. The reason is we are using the <em>same</em> store instance for both tests! When we did <code class="inline">store.increment()</code> in the first test, we increased the <code class="inline">count</code> to 1, and it stayed that way for the second test. This is called <em>cross test contamination</em>. </p>
+<p>What we need is some way to have a fresh store for each test. </p>
+<h2>A useStore composable</h2>
+<p>Let’s create a <code class="inline">useStore</code> function, which will inject the store into each component. Update <code class="inline">store.ts</code>:</p>
+<pre data-line="1, 7-9"><code class="ts lang-ts language-ts">import { reactive, inject, provide } from &#39;vue&#39;
+
+// ...
+
+export const store = new Store()
+
+export const useStore = (): Store =&gt; {
+  return inject(&#39;store&#39;)
+}</code></pre>
+<p>Now we just need some way to provide the store to the application. Update <code class="inline">main.ts</code>:</p>
+<pre data-line="6"><code class="ts lang-ts language-ts">import { createApp } from &#39;vue&#39;
+import App from &#39;./frontend/App.vue&#39;
+import { store } from &#39;./frontend/store&#39;
+
+const app = createApp(App)
+app.provide(&#39;store&#39;, store)
+
+app.mount(&#39;#app&#39;)</code></pre>
+<p>Now when a component calls <code class="inline">useStore</code>, it will find the nearest <code class="inline">provide(&#39;store&#39;)</code> call. We only have one, at the very top level of the application. Update <code class="inline">App.vue</code> and <code class="inline">Category.vue</code>:</p>
+<pre data-line="7,11"><code class="html lang-html language-html">&lt;template&gt; 
+  &lt;!-- ... --&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+// ...
+import { useStore } from &#39;./store&#39;
+
+export default defineComponent({
+  setup() {
+    const store = useStore()
+
+    // ...
+  }
+})
+&lt;/script&gt;
+</code></pre>
+<p>That easy! The application is now working again, but is powered using <code class="inline">provide</code> and <code class="inline">inject</code>. Finally, we can fix the tests. Update <code class="inline">store.ts</code> to <code class="inline">export</code> the <code class="inline">class Store</code> so we can import it in the <code class="inline">App.spec.ts</code> file, then update the tests in <code class="inline">App.spec.ts</code></p>
+<pre data-line="9-13, 20-24"><code class="ts lang-ts language-ts">import { mount, flushPromises } from &#39;@vue/test-utils&#39;
+import App from &#39;./App.vue&#39;
+import { Store } from &#39;./store&#39;
+
+// ...
+
+test(&#39;App&#39;, async () =&gt; {
+  const wrapper = mount(App, {
+    global: {
+      provide: {
+        store: store
+      }
+    }
+  })
+  expect(wrapper.html()).toContain(&#39;Count: 1&#39;)
+})
+
+test(&#39;App&#39;, async () =&gt; {
+  const wrapper = mount(App, {
+    global: {
+      provide: {
+        store: store
+      }
+    }
+  })
+  expect(wrapper.html()).toContain(&#39;Count: 1&#39;)
+})</code></pre>
+<p>Now they both pass - we use the <code class="inline">global.provide</code> field to create and provide a new store instance for each test, eliminating the cross test contamination.</p>
+<h2>Conclusion</h2>
+<p>This article explored <code class="inline">provide</code> and <code class="inline">inject</code>. When using these two functions</p>
+<ul>
+<li>Use them sparingly. Things can get confusing.
+</li>
+<li>You may provide different values using the same key to components depending on the nearest ancestor that calls <code class="inline">provide</code>.
+</li>
+<li>It is idiomatic to call <code class="inline">inject</code> inside a <code class="inline">useXXX</code> function. These are sometimes called “hooks” or “composables”, but they are just functions that call <code class="inline">inject</code>.
+</li>
+<li>You can use <code class="inline">provide</code> and <code class="inline">inject</code> to avoid cross test contamination and make each test isolated.
+</li>
+</ul>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
