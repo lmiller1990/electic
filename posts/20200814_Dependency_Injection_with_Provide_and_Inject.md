@@ -1,5 +1,3 @@
-# Dependency Injection Provide Inject
-
 Vue has a pair of functions, `provide` and `inject`, making it easy to utilize dependency injection, making it easy to have a globally accessible object (such as a router or a flux store) as well as making it easy to test components in isolation. Let's see how `provide` and `inject` work with an example, some of the things to look out for, then upgrade an existing by writing a `useStore` composable to make a reactive store available in all the components.
 
 ## A Simple Example

@@ -13,7 +13,6 @@
   </h1>
 
   <div class="post_body">
-    <h1>Dependency Injection Provide Inject</h1>
 <p>Vue has a pair of functions, <code class="inline">provide</code> and <code class="inline">inject</code>, making it easy to utilize dependency injection, making it easy to have a globally accessible object (such as a router or a flux store) as well as making it easy to test components in isolation. Let’s see how <code class="inline">provide</code> and <code class="inline">inject</code> work with an example, some of the things to look out for, then upgrade an existing by writing a <code class="inline">useStore</code> composable to make a reactive store available in all the components.</p>
 <h2>A Simple Example</h2>
 <p>Let’s start with a simple example: an <code class="inline">A</code> component which renders a color, accessed via <code class="inline">provide</code>. We will use render functions, instead of a single file component, since that way we can write multiple components in a single file.</p>
