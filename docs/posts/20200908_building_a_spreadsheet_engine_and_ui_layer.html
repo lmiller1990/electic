@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200908 Building a Spreadsheet Engine and UI Layer
+  </h1>
+
+  <div class="post_body">
+    <p>Over the next few blog articles, I will build a mini spreadsheet clone (like Excel). The goal isn’t really to build a spreadsheet, but to show how thinking about data structures and how to represent concepts will help you separate your business logic and your UI layer. </p>
+<p>This has many benefits:</p>
+<ul>
+<li>testability
+</li>
+<li>reveals bad decision decisions early
+</li>
+<li>performance (the wrong data structure can cost you; excessive loops, unnecessary re-renders)
+</li>
+</ul>
+<p>I am still not sure on the ideal way to design a spreadsheet engine. Any feedback is always welcome.</p>
+<p>You can find the <a href="https://github.com/lmiller1990/spreadsheet">completed source code here</a>.</p>
+<h2>Modular Thinking</h2>
+<p>So we are building a spreadsheet application; obviously we will need a UI, so people can interact with it; but the spreadsheet engine should be capable of doing everything without actually <em>needing</em> a UI. For example, you should also be able to use it from a terminal, if you really wanted.</p>
+<p>So we are actually building two things:</p>
+<ul>
+<li>a spreadsheet engine
+</li>
+<li>a spreadsheet UI
+</li>
+</ul>
+<p>The engine will store the state of each cell, and any other relevant information. The UI will just present the state to the user, and let them interact with it. If you are reading this blog, you are likely a developer, not a designer, so you want to focus on building the engine in such a manner it can be applied to any UI the designer comes up with.</p>
+<h2>Design Decisions</h2>
+<p>While designers are constantly coming up with new ideas and concepts, there are some assumptions we can make about a spreadsheet, and we will have some self imposed constraints for the sake of this simple example.</p>
+<ul>
+<li>the spreadsheet will only be 2 dimensional (rows and columns).
+</li>
+<li>we will only support two cell types: <code class="inline">primitive</code>, which is just a number or string value, and <code class="inline">formula</code>, which is something like <code class="inline">=SUM(a1, a2, a3)</code>.
+</li>
+</ul>
+<h2>Writing Some Basic Interfaces</h2>
+<p>I hae decided I am going to keep track of my cells in the same manner as they are going to appear in the UI; rows as numbers, columns as letters. I am also going to limit the spreadsheet to 26 columns: A - Z. I will, however, design things in such a manner that they can be extended to have more columns if needed.</p>
+<p>With this in mind, I defined 3 interfaces. </p>
+<pre><code class="ts lang-ts language-ts">export interface Cell {
+  value: string
+  type: &#39;primitive&#39; | &#39;formula&#39;
+}
+
+export interface Sheet {
+  cells: Record&lt;string, Cell&gt;
+}</code></pre>
+<p>I defined these in a file called <code class="inline">spreadsheet.ts</code>.</p>
+<p>I think <code class="inline">Cell</code> is relatively straight forward. <code class="inline">Sheet</code> is too, kind of, except I am using a <code class="inline">Record</code> instead of a multidimensional array, like you might have expected.</p>
+<p>The main reason I did this is when you use a spreadsheet, you are often looking up specific cells - much more often than you are iterating over them all.</p>
+<p>I am also going to use the same format users do as the key; A1, B4 etc. So a simple spreadsheet would be represented like this:</p>
+<pre><code class="ts lang-ts language-ts">const sheet: Sheet = {
+  cells: {
+    &#39;a1&#39;: {
+      value: &#39;1&#39;,
+      type: &#39;primitive&#39;,
+    },
+    &#39;a2&#39;: {
+      value: &#39;2&#39;,
+      type: &#39;primitive&#39;,
+    },
+    &#39;b1&#39;: {
+      value: &#39;3&#39;,
+      type: &#39;primitive&#39;,
+    },
+    &#39;b2&#39;: {
+      value: &#39;=SUM(a1, a2)&#39;,
+      type: &#39;formula&#39;,
+    }
+  }
+}</code></pre>
+<h2>Rendering the Spreadsheet</h2>
+<p>Although I like to use Vue to build my UIs, I would like to make this spreadsheet engine framework agnostic; that means we should be able to transform the <code class="inline">Record&lt;string, cell&gt;</code> data structure into something any framework can easily render. I think the easiest way to do this will be a multi dimensional array. For example this would be very easy to render:</p>
+<pre><code class="ts lang-ts language-ts">const rendered: string[][] = 
+[
+  [&#39;1&#39;, &#39;2&#39;],
+  [&#39;3&#39;, &#39;4&#39;]
+]</code></pre>
+<p>You would just need to <code class="inline">for</code> loops, or <code class="inline">v-for</code> in the case of Vue. Something like this (note, the real implementation will be a little more involved).</p>
+<pre><code class="html lang-html language-html">&lt;table&gt;
+  &lt;tr v-for=&quot;row in rendered&quot;&gt;
+    &lt;td v-for=&quot;cell in row&quot;&gt;
+      {{ cell }}
+    &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;</code></pre>
+<p>One of the downsides to using a <code class="inline">Record</code> to store the cells if there is no easy way to know how many roles and columns are actually in the spreadsheet. You don’t actually need to know how many rows/columns are needed until you render the UI, though, os I think using a <code class="inline">Record</code> to store the cells is still a good choice. Intuitively, the below spreadsheet has 2 rows and 1 column:</p>
+<pre><code class="ts lang-ts language-ts">const sheet = {
+  cells: {
+    &#39;a1&#39;: { value: &#39;dog&#39; },
+    &#39;a2&#39;: { value: &#39;cat&#39; }
+  }
+}
+
+/* 
+  looks like this:
+     +--------+
+     |   a    |
++----|--------+
+| 1  | &#39;dog&#39;  |
++----+--------+
+| 2  | &#39;cat&#39;  |
++----+--------+
+
+*/</code></pre>
+<h2>Writing the render test</h2>
+<p>Now we know what we want to achieve with the <code class="inline">render</code> function, let’s write a test. I think it’s useful to include <code class="inline">value</code>, <code class="inline">col</code> and <code class="inline">row</code> in the rendered output. I wrote the following test in a <code class="inline">spreadsheet.spec.ts</code> and ran it with Jest and the <code class="inline">ts-jest</code> preset. I also added a <code class="inline">UICell</code> interface to my <code class="inline">spreadsheet.ts</code> file:</p>
+<pre><code class="ts lang-ts language-ts">export interface UICell {
+  value: string
+  row: number
+  col: string
+}</code></pre>
+<p>The test is as follows:</p>
+<pre><code class="ts lang-ts language-ts">import { Sheet, UICell } from &#39;./spreadsheet&#39;
+
+describe(&#39;render&#39;, () =&gt; {
+  test(&#39;transforms into a multidimensions array suitable for looping&#39;, () =&gt; {
+    const sheet: Sheet = {
+      cells: {
+        &#39;a1&#39;: {
+          value: &#39;1&#39;,
+          type: &#39;primitive&#39;,
+        },
+        &#39;a2&#39;: {
+          value: &#39;2&#39;,
+          type: &#39;primitive&#39;,
+        },
+        &#39;b1&#39;: {
+          value: &#39;3&#39;,
+          type: &#39;primitive&#39;,
+        },
+        &#39;b2&#39;: {
+          value: &#39;4&#39;,
+          type: &#39;primitive&#39;,
+        }
+      }
+    }
+
+    const expected: UICell[][] = [
+      [{ value: &#39;1&#39;, col: &#39;a&#39;, row: 1 }, { value: &#39;3&#39;, col: &#39;b&#39;, row: 1 }],
+      [{ value: &#39;2&#39;, col: &#39;a&#39;, row: 2 }, { value: &#39;4&#39;, col: &#39;b&#39;, row: 2 }],
+    ]
+
+    expect(render(sheet)).toEqual(expected)
+  })
+})</code></pre>
+<h2>Figuring out the Dimensions</h2>
+<p>We need to know the number of rows and columns before we start writing <code class="inline">render</code>. Those need to be derived from the cells. We have <code class="inline">a1, b1, a2, b2</code> so we know it’s going to be  2 x 2. Let’s write a test for a new function called <code class="inline">calcMaxDimensions</code>:</p>
+<pre><code class="ts lang-ts language-ts">describe(&#39;calcDimensions&#39;, () =&gt; {
+  it(&#39;works for many cells&#39;, () =&gt; {
+    const cell = (): Cell =&gt; ({
+      type: &#39;primitive&#39;,
+      value: &#39;&#39;
+    })
+
+    expect(calcMaxDimensions({
+      cells: {
+        &#39;a1&#39;: cell(),
+        &#39;b1&#39;: cell(),
+        &#39;c1&#39;: cell(),
+        &#39;a2&#39;: cell(),
+        &#39;b2&#39;: cell(),
+        &#39;c2&#39;: cell()
+      }
+    })).toEqual({ rows: 2, cols: 3 })
+  })
+})</code></pre>
+<p>The implementation is a little complex. It’s also not THAT efficient. We only need to call this function when the number of rows/columns changes, though, which isn’t that often. I’ll show the code then explain a little - best watch the screencast for a more extensive explanation.</p>
+<pre><code class="ts lang-ts language-ts">export function calcMaxDimensions(sheet: Sheet): Dimensions {
+  const rows: number[] = []
+  const cols: string[] = []
+  
+  for (const key of Object.keys(sheet.cells)) {
+    const [_, col, row] = key.match(/(\w.*?)(\d.*)/)
+    rows.push(parseInt(row))
+    cols.push(col)
+  }
+
+  return {
+    rows: Math.max(...rows),
+    cols: cols.sort().reverse()[0].charCodeAt(0) - &#39;a&#39;.charCodeAt(0) + 1
+  }
+}</code></pre>
+<p>The main points:</p>
+<ul>
+<li>we use a regexp to figure out the column and row for each cell as we iterate over the keys of <code class="inline">sheet.cells</code>, which is <code class="inline">a1</code>, <code class="inline">b2</code> etc.
+</li>
+<li><code class="inline">const [_, col, row] = key.match(/(\w.*?)(\d.*)/)</code> will give us <code class="inline">col = &#39;a&#39;, row = &#39;2&#39;</code> etc.
+</li>
+<li>keep the row and col for later. We want to find the largest one for each, that will tell us the dimensions of the spreadsheet
+</li>
+<li>figure out the rows by getting the maximum number in rows - this is easy because rows are already numbers
+</li>
+<li>the column count is more tricky. <code class="inline">a</code> = 1 column, <code class="inline">z</code> = 26. We are only allowing 26 columns for simplicity, but allowing for more wouldn’t be hard
+</li>
+<li>sort the columns then reverse it. Grab the first element to get the largest (where<code class="inline">z</code> is the largest possible value in our spreadsheet)
+</li>
+<li>use <code class="inline">charCodeAt</code> to get the character code. These are ASCII codes. ‘a’<code class="inline">is 97. So we subtract 97 (&#39;a&#39;.charCodeAt(0)</code>) to offset it, then add 1
+</li>
+</ul>
+<p>The test now passes. Implementing the rest of <code class="inline">render</code> is trivial now:</p>
+<pre><code class="ts lang-ts language-ts">export function render(sheet: Sheet): UICell[][] {
+  const { rows, cols } = calcMaxDimensions(sheet)
+  const rendered: UICell[][] = []
+
+  for (let j = 0; j &lt; rows; j++) {
+    const row: UICell[] = []
+    for (let i = 0; i &lt; cols; i++) {
+      const letter = String.fromCharCode(i + 97)
+      const index = `${letter}${j + 1}`
+      row.push({ 
+        row: j + 1,
+        col: letter,
+        value: sheet.cells[index].value
+      })
+    }
+    rendered.push(row)
+  }
+
+  return rendered
+}</code></pre>
+<p>Great! We now have a (very) basic spreadsheet engine. We don’t support formulas, yet, or have any way to update the spreadsheet. We will cover this in the next blog post, where we use Vue and Vite to create a simple UI. We also touch on the fact that spreadsheets are modal editors, like Vim, and how this impacts how we build the UI.</p>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
