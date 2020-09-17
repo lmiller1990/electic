@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20200920 Lazily Evaluated Formulas and a useSpreadsheet Composable
+  </h1>
+
+  <div class="post_body">
+    <p>In the previous post, we build a nice little UI layer on top of our spreadsheet engine. The UI is currently read only - our goal will be to allow the user to update cells now, as well as implement basic support for formulas (such as <code class="inline">=SUM(a1, b1)</code>). We will create a <code class="inline">useSpreadsheet</code> composable, and explore some optimizations using lazily evaluated functions.</p>
+<p>You can find the <a href="https://github.com/lmiller1990/spreadsheet">completed source code here</a>.</p>
+<h2>Updating the Spreadsheet</h2>
+<p>We left off with our <code class="inline">spreadsheet-editable-cell.vue</code> looking something like this:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;td v-show=&quot;active&quot;&gt;
+    &lt;input :value=&quot;cell.value&quot; ref=&quot;cellRef&quot; /&gt;
+  &lt;/td&gt;
+
+  &lt;td 
+    v-show=&quot;!active&quot;
+    @click=&quot;activate&quot;
+  &gt;
+    &lt;span&gt;
+      {{ cell.value }}
+    &lt;/span&gt;
+  &lt;/td&gt;
+&lt;/template&gt;</code></pre>
+<p>We are not using <code class="inline">v-model</code>, but <code class="inline">:value</code> - it’s read only. We need a way to update the cell. If you take a look at any spreadsheet program, you will realize it’s a <strong>modal</strong> editor, like Vim. The default mode is “visual” - you can see the cells, but typing on your keyboard won’t change them. You need to click a cell to enter “insert” mode - we’ve implemented that. For now, the way I’ve decided to “commit” a change is to update our reactive sheet data structure when the users presses enter. Let’s add an event listener:</p>
+<pre data-line="3"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;td v-show=&quot;active&quot;&gt;
+    &lt;input :value=&quot;cell.value&quot; ref=&quot;cellRef&quot; @keyup.enter=&quot;handleUpdate&quot; /&gt;
+  &lt;/td&gt;
+
+  &lt;td 
+    v-show=&quot;!active&quot;
+    @click=&quot;activate&quot;
+  &gt;
+    &lt;span&gt;
+      {{ cell.value }}
+    &lt;/span&gt;
+  &lt;/td&gt;
+&lt;/template&gt;</code></pre>
+<p>Great. Now to figure out how to update the spreadsheet.</p>
+<h2>Creating updateCell</h2>
+<p>At the moment if we want to update the spreadsheet, we will need to <code class="inline">$emit</code> an event to the top level component (<code class="inline">app.vue</code>). This will get out of hand very quickly. Also, updating the spreadsheet is part of the business logic, or in this case, the spreadsheet <em>engine</em>, so we want to extract that logic out of the components as much as possible. </p>
+<p>First, let’s add an <code class="inline">updateCell</code> function to the engine in <code class="inline">spreadsheet.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">interface UpdateCell {
+  index: string
+  value: string
+}
+
+export function updateCell(sheet: Sheet, updateCell: UpdateCell) {
+  const { index, value } = updateCell
+  sheet.cells[index].value = value
+}</code></pre>
+<p>Simple stuff - we just pass a <code class="inline">sheet</code> we’d like to update, and a <code class="inline">cell</code> with the <code class="inline">index</code> (eg, <code class="inline">a1</code> etc) and the new <code class="inline">value</code>. If you enjoy functional programming, you are probably not too impressed - we are mutating the variable we receive in the arguments, instead of returning a new spreadsheet. Vue’s reactivity relies on mutation, so this is not really avoidable.</p>
+<p>Updating the cell is an <code class="inline">O(1)</code> operation because of our intelligent decision to use a key/value map for storing the spreadsheet. Great. No matter how large the sheet is, it will be quick to update cells. </p>
+<h2>Composing with useSpreadsheet</h2>
+<p>We will now write a <code class="inline">useSpreadsheet</code> function to make it easy to access and update the spreadsheet. These functions are sometimes known as “composables”. I created a new directory call <code class="inline">composables</code> and inside it added a <code class="inline">spreadsheet.ts</code> file with the following:</p>
+<pre><code class="ts lang-ts language-ts">import { reactive } from &#39;vue&#39;
+import { Sheet  } from &#39;../spreadsheet&#39;
+
+const sheet: Sheet = reactive&lt;Sheet&gt;({
+  cells: {
+    &#39;a1&#39;: {
+      value: &#39;100&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;a2&#39;: {
+      value: &#39;200&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;b1&#39;: {
+      value: &#39;300&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;b2&#39;: {
+      value: &#39;=SUM(a1, a2)&#39;,
+      type: &#39;formula&#39;
+    },
+  }
+})
+
+export function useSpreadsheet() {
+  return {
+    sheet
+  }
+} </code></pre>
+<p>I added a new cell, <code class="inline">b2</code>, with a formula for some testing. Other than that, we just moved our <code class="inline">sheet</code> variable into a new file and exposed it via <code class="inline">useSpreadsheet</code>.</p>
+<p>Update <code class="inline">app.vue</code> to use the new <code class="inline">useSpreadsheet</code> composable:</p>
+<pre data-line="4, 15"><code class="html lang-html language-html">&lt;script lang=&quot;ts&quot;&gt;
+import { computed, reactive } from &#39;vue&#39;
+import { Sheet, render } from &#39;./spreadsheet&#39;
+import { useSpreadsheet } from &#39;./composables/spreadsheet&#39;
+import SpreadsheetHeader from &#39;./spreadsheet-header.vue&#39;
+import SpreadsheetBody from &#39;./spreadsheet-body.vue&#39;
+
+export default {
+  components: {
+    SpreadsheetHeader,
+    SpreadsheetBody
+  },
+
+  setup() {
+    const { sheet } = useSpreadsheet()
+
+    return {
+      sheet: computed(() =&gt; render(sheet))
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>It looks like this:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/spreadsheet2/pt3/ss0.png" alt="" /></p>
+<p>Before going any further, let’s head back to <code class="inline">spreadsheet-editable-cell.vue</code> and implement <code class="inline">handleUpdate</code>:</p>
+<pre data-line="2-3,10-18, 34"><code class="ts lang-ts language-ts">// in &lt;script&gt;
+import { UICell, updateCell } from &#39;./spreadsheet&#39;
+import { useSpreadsheet } from &#39;./composables/spreadsheet&#39;
+
+// ... props ...
+
+setup(props, { emit }) {
+  const cellRef = ref(null)
+
+  const handleUpdate = ($evt: any) =&gt; {
+    updateCell(
+      useSpreadsheet().sheet,
+      {
+        index: `${props.cell.col}${props.cell.row}`,
+        value: $evt.target.value
+      }
+    )
+  }
+
+  const active = computed(() =&gt; {
+    return props.activeCell === `${props.cell.col}${props.cell.row}`
+  })
+
+  const activate = () =&gt; {
+    emit(&#39;activate&#39;, {
+      cell: props.cell,
+      cellRef
+    })
+  }
+
+  return {
+    active,
+    cellRef,
+    handleUpdate,
+    activate
+  }
+}</code></pre>
+<p>It works! If you change the value of a cell and press enter, you can see the debugging information update.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/spreadsheet2/pt3/ss3.png" alt="" /></p>
+<p>You may have noticed we are showing <code class="inline">=SUM(a1, a2)</code> in <code class="inline">b2</code>. That’s not right. This highlights a problem - to support formulas, we need both a <em>value</em> and a <em>displayValue</em>. The value for the formula would be <code class="inline">=SUM(a1, a2)</code> and the displayValue would be the resulting calculation.</p>
+<h2>Supporting Lazily Evaluated Formulas</h2>
+<p>Let’s add a new property to the cells: <code class="inline">displayValue</code>. This will be lazily evaluated. What this means if we won’t calculate the value until we <em>need</em> to. For example, imagine you had 5000 rows. You would only want to calculate the derived values for the cells on screen right now - this is a major optimization, especially if you have a number of complex formulas. We will implement <code class="inline">displayValue</code> as a function that will return the <code class="inline">value</code> for <code class="inline">primitive</code> cells and perform the calculation for <code class="inline">formula</code> cells.</p>
+<p>Let’s start with a test for a function called <code class="inline">deriveValue</code>. This will parse the formula and calculate the final result. Update <code class="inline">spreadsheet.spec.ts</code>:</p>
+<pre><code class="ts lang-ts language-ts">import { Dimensions, calcMaxDimensions, Cell, Sheet, render, UICell, deriveValue } from &#39;./spreadsheet&#39;
+
+const sheet: Sheet = {
+  cells: {
+    &#39;a1&#39;: {
+      value: &#39;100&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;a2&#39;: {
+      value: &#39;200&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;b1&#39;: {
+      value: &#39;300&#39;,
+      type: &#39;primitive&#39;
+    },
+    &#39;b2&#39;: {
+      value: &#39;=SUM(a1, a2)&#39;,
+      type: &#39;formula&#39;
+    },
+  }
+}
+
+test(&#39;deriveValue&#39;, () =&gt; {
+  const actual = deriveValue(sheet, sheet.cells[&#39;b2&#39;])
+  console.log(actual)
+
+  expect(actual).toBe(&#39;300&#39;)
+})</code></pre>
+<p>Next add a new property to <code class="inline">UICell</code>. Notice we are using <code class="inline">UICell</code> - the derived result for a formula is a <em>UI concern</em>. Until someone actually looks at the spreadsheet, we don’t really care what the resulting calculation is, so there is no need to add this information to the internal <code class="inline">Cell</code> interface.</p>
+<pre data-line="1"><code class="ts lang-ts language-ts">export interface UICell {
+  value: string
+  displayValue: () =&gt; string
+  col: string // a, b, c.... z
+  row: number // 1 2 3....
+}</code></pre>
+<p>Next update <code class="inline">render</code> to populate the <code class="inline">displayValue</code> property:</p>
+<pre data-line="16"><code class="ts lang-ts language-ts">export function render(sheet: Sheet): UICell[][] {
+  const rendered: UICell[][] = []
+  const { cols, rows } = calcMaxDimensions(sheet)
+
+  for (let j = 0; j &lt; rows; j++) {
+    const row: UICell[] = []
+
+    for (let i = 0; i &lt; cols; i++) {
+      const letter = String.fromCharCode(i + &#39;a&#39;.charCodeAt(0))
+      const idx = `${letter}${j + 1}`
+      const cell = sheet.cells[idx]
+
+      row.push({
+        value: cell?.value || &#39;&#39;,
+        col: letter,
+        displayValue: displayValueFactory(sheet, cell),
+        row: j + 1
+      })
+    }
+    rendered.push(row)
+  }
+
+  return rendered
+}</code></pre>
+<p>The <code class="inline">render</code> test is now failing - we added <code class="inline">displayValue</code>, so we will need to update the test as well. It’s not difficult. For now, though, let’s focus on finishing the <code class="inline">displayValueFactory</code> function and getting <code class="inline">deriveValue</code> to pass, then we can fix the test. For now I just commented out the <code class="inline">render</code> test.</p>
+<p><code class="inline">displayValueFactory</code> will return a function that calculates the display value. For now, I just want to get it working, so we will assume the formula is going to be a <code class="inline">SUM</code> formula, and it will always contain a valid formula (eg, any cell we pass it will definitely have an integer). We will add more checks and support for additional formulas later, as well as consider nested formulas, etc.</p>
+<pre><code class="ts lang-ts language-ts">export function displayValueFactory(sheet: Sheet, cell?: Cell) {
+  if (!cell) {
+    return () =&gt; &#39;&#39;
+  }
+
+  if (cell.type === &#39;primitive&#39;) {
+    return () =&gt; cell.value
+  }
+
+  if (cell.type === &#39;formula&#39;) {
+    return () =&gt; deriveValue(sheet, cell)
+  }
+}</code></pre>
+<p>For <code class="inline">primitive</code> we just return the value as is. Finally, let’s implement <code class="inline">deriveValue</code> and get our test to pass:</p>
+<pre><code class="ts lang-ts language-ts">export function deriveValue(sheet: Sheet, cell: Cell) {
+  const [_, args] = cell.value.match(/=SUM\((.*)\)/)
+  const cells = args.split(&#39;,&#39;).map(x =&gt; parseInt(
+    sheet.cells[x.trim()].value)
+  )
+
+  return cells.reduce((acc, curr) =&gt; acc + curr, 0).toString()
+}</code></pre>
+<p>We just grab the arguments to the formula with regexp, assume it’s a SUM formula, assume the arguments are valid cells with valid integers and add them up. Perfect! Of course in a real world system (and even this small one) we need some defensive checks for bad data - we will add those later on.</p>
+<h2>Using displayValue</h2>
+<p>Update <code class="inline">spreadsheet-editable-cell.vue</code> to use the new <code class="inline">displayValue</code> property:</p>
+<pre data-line="11"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;td v-show=&quot;active&quot;&gt;
+    &lt;input :value=&quot;cell.value&quot; ref=&quot;cellRef&quot; @keyup.enter=&quot;handleUpdate&quot; /&gt;
+  &lt;/td&gt;
+
+  &lt;td 
+    v-show=&quot;!active&quot;
+    @click=&quot;activate&quot;
+  &gt;
+    &lt;span&gt;
+      {{ cell.displayValue() }}
+    &lt;/span&gt;
+  &lt;/td&gt;
+&lt;/template&gt;</code></pre>
+<p>It works. I update the formula in <code class="inline">b2</code> and pressed enter, then clicked away. The cell value changed to 600, which is correct.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/spreadsheet2/pt3/ss2.png" alt="" /></p>
+<p>We made great progress! We can now update the spreadsheet and handle basic formulas. The next step will be to ensure we correctly handle (or gracefully fail) for invalid formulas, and support more (or even arbitrarily complex?) formulas.</p>
+<p>You can find the <a href="https://github.com/lmiller1990/spreadsheet">completed source code here</a>.</p>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
