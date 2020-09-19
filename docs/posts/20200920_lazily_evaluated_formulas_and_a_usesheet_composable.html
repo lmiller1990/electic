@@ -9,11 +9,11 @@
 </head>
 <body>
   <h1 class="title">
-    20200920 Lazily Evaluated Formulas and a useSpreadsheet Composable
+    20200920 Lazily Evaluated Formulas and a useSheet Composable
   </h1>
 
   <div class="post_body">
-    <p>In the previous post, we build a nice little UI layer on top of our spreadsheet engine. The UI is currently read only - our goal will be to allow the user to update cells now, as well as implement basic support for formulas (such as <code class="inline">=SUM(a1, b1)</code>). We will create a <code class="inline">useSpreadsheet</code> composable, and explore some optimizations using lazily evaluated functions.</p>
+    <p>In the previous post, we build a nice little UI layer on top of our spreadsheet engine. The UI is currently read only - our goal will be to allow the user to update cells now, as well as implement basic support for formulas (such as <code class="inline">=SUM(a1, b1)</code>). We will create a <code class="inline">useSheet</code> composable, and explore some optimizations using lazily evaluated functions.</p>
 <p>You can find the <a href="https://github.com/lmiller1990/spreadsheet">completed source code here</a>.</p>
 <h2>Updating the Spreadsheet</h2>
 <p>We left off with our <code class="inline">spreadsheet-editable-cell.vue</code> looking something like this:</p>
@@ -61,8 +61,8 @@ export function updateCell(sheet: Sheet, updateCell: UpdateCell) {
 }</code></pre>
 <p>Simple stuff - we just pass a <code class="inline">sheet</code> we’d like to update, and a <code class="inline">cell</code> with the <code class="inline">index</code> (eg, <code class="inline">a1</code> etc) and the new <code class="inline">value</code>. If you enjoy functional programming, you are probably not too impressed - we are mutating the variable we receive in the arguments, instead of returning a new spreadsheet. Vue’s reactivity relies on mutation, so this is not really avoidable.</p>
 <p>Updating the cell is an <code class="inline">O(1)</code> operation because of our intelligent decision to use a key/value map for storing the spreadsheet. Great. No matter how large the sheet is, it will be quick to update cells. </p>
-<h2>Composing with useSpreadsheet</h2>
-<p>We will now write a <code class="inline">useSpreadsheet</code> function to make it easy to access and update the spreadsheet. These functions are sometimes known as “composables”. I created a new directory call <code class="inline">composables</code> and inside it added a <code class="inline">spreadsheet.ts</code> file with the following:</p>
+<h2>Composing with useSheet</h2>
+<p>We will now write a <code class="inline">useSheet</code> function to make it easy to access and update the spreadsheet. These functions are sometimes known as “composables”. I created a new directory call <code class="inline">composables</code> and inside it added a <code class="inline">spreadsheet.ts</code> file with the following:</p>
 <pre><code class="ts lang-ts language-ts">import { reactive } from &#39;vue&#39;
 import { Sheet  } from &#39;../spreadsheet&#39;
 
@@ -87,17 +87,17 @@ const sheet: Sheet = reactive&lt;Sheet&gt;({
   }
 })
 
-export function useSpreadsheet() {
+export function useSheet() {
   return {
     sheet
   }
 } </code></pre>
-<p>I added a new cell, <code class="inline">b2</code>, with a formula for some testing. Other than that, we just moved our <code class="inline">sheet</code> variable into a new file and exposed it via <code class="inline">useSpreadsheet</code>.</p>
-<p>Update <code class="inline">app.vue</code> to use the new <code class="inline">useSpreadsheet</code> composable:</p>
+<p>I added a new cell, <code class="inline">b2</code>, with a formula for some testing. Other than that, we just moved our <code class="inline">sheet</code> variable into a new file and exposed it via <code class="inline">useSheet</code>.</p>
+<p>Update <code class="inline">app.vue</code> to use the new <code class="inline">useSheet</code> composable:</p>
 <pre data-line="4, 15"><code class="html lang-html language-html">&lt;script lang=&quot;ts&quot;&gt;
 import { computed, reactive } from &#39;vue&#39;
 import { Sheet, render } from &#39;./spreadsheet&#39;
-import { useSpreadsheet } from &#39;./composables/spreadsheet&#39;
+import { useSheet } from &#39;./composables/spreadsheet&#39;
 import SpreadsheetHeader from &#39;./spreadsheet-header.vue&#39;
 import SpreadsheetBody from &#39;./spreadsheet-body.vue&#39;
 
@@ -108,7 +108,7 @@ export default {
   },
 
   setup() {
-    const { sheet } = useSpreadsheet()
+    const { sheet } = useSheet()
 
     return {
       sheet: computed(() =&gt; render(sheet))
@@ -121,7 +121,7 @@ export default {
 <p>Before going any further, let’s head back to <code class="inline">spreadsheet-editable-cell.vue</code> and implement <code class="inline">handleUpdate</code>:</p>
 <pre data-line="2-3,10-18, 34"><code class="ts lang-ts language-ts">// in &lt;script&gt;
 import { UICell, updateCell } from &#39;./spreadsheet&#39;
-import { useSpreadsheet } from &#39;./composables/spreadsheet&#39;
+import { useSheet } from &#39;./composables/spreadsheet&#39;
 
 // ... props ...
 
@@ -130,7 +130,7 @@ setup(props, { emit }) {
 
   const handleUpdate = ($evt: any) =&gt; {
     updateCell(
-      useSpreadsheet().sheet,
+      useSheet().sheet,
       {
         index: `${props.cell.col}${props.cell.row}`,
         value: $evt.target.value

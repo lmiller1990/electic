@@ -1,4 +1,4 @@
-In the previous post, we build a nice little UI layer on top of our spreadsheet engine. The UI is currently read only - our goal will be to allow the user to update cells now, as well as implement basic support for formulas (such as `=SUM(a1, b1)`). We will create a `useSpreadsheet` composable, and explore some optimizations using lazily evaluated functions.
+In the previous post, we build a nice little UI layer on top of our spreadsheet engine. The UI is currently read only - our goal will be to allow the user to update cells now, as well as implement basic support for formulas (such as `=SUM(a1, b1)`). We will create a `useSheet` composable, and explore some optimizations using lazily evaluated functions.
 
 You can find the [completed source code here](https://github.com/lmiller1990/spreadsheet).
 
@@ -66,9 +66,9 @@ Simple stuff - we just pass a `sheet` we'd like to update, and a `cell` with the
 
 Updating the cell is an `O(1)` operation because of our intelligent decision to use a key/value map for storing the spreadsheet. Great. No matter how large the sheet is, it will be quick to update cells. 
 
-## Composing with useSpreadsheet
+## Composing with useSheet
 
-We will now write a `useSpreadsheet` function to make it easy to access and update the spreadsheet. These functions are sometimes known as "composables". I created a new directory call `composables` and inside it added a `spreadsheet.ts` file with the following:
+We will now write a `useSheet` function to make it easy to access and update the spreadsheet. These functions are sometimes known as "composables". I created a new directory call `composables` and inside it added a `spreadsheet.ts` file with the following:
 
 ```ts
 import { reactive } from 'vue'
@@ -95,22 +95,22 @@ const sheet: Sheet = reactive<Sheet>({
   }
 })
 
-export function useSpreadsheet() {
+export function useSheet() {
   return {
     sheet
   }
 } 
 ```
 
-I added a new cell, `b2`, with a formula for some testing. Other than that, we just moved our `sheet` variable into a new file and exposed it via `useSpreadsheet`.
+I added a new cell, `b2`, with a formula for some testing. Other than that, we just moved our `sheet` variable into a new file and exposed it via `useSheet`.
 
-Update `app.vue` to use the new `useSpreadsheet` composable:
+Update `app.vue` to use the new `useSheet` composable:
 
 ```html
 <script lang="ts">
 import { computed, reactive } from 'vue'
 import { Sheet, render } from './spreadsheet'
-import { useSpreadsheet } from './composables/spreadsheet'
+import { useSheet } from './composables/spreadsheet'
 import SpreadsheetHeader from './spreadsheet-header.vue'
 import SpreadsheetBody from './spreadsheet-body.vue'
 
@@ -121,7 +121,7 @@ export default {
   },
 
   setup() {
-    const { sheet } = useSpreadsheet()
+    const { sheet } = useSheet()
 
     return {
       sheet: computed(() => render(sheet))
@@ -140,7 +140,7 @@ Before going any further, let's head back to `spreadsheet-editable-cell.vue` and
 ```ts
 // in <script>
 import { UICell, updateCell } from './spreadsheet'
-import { useSpreadsheet } from './composables/spreadsheet'
+import { useSheet } from './composables/spreadsheet'
 
 // ... props ...
 
@@ -149,7 +149,7 @@ setup(props, { emit }) {
 
   const handleUpdate = ($evt: any) => {
     updateCell(
-      useSpreadsheet().sheet,
+      useSheet().sheet,
       {
         index: `${props.cell.col}${props.cell.row}`,
         value: $evt.target.value
