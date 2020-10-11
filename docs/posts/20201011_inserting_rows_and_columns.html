@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20201011 Inserting Rows and Columns
+  </h1>
+
+  <div class="post_body">
+    <p>This is the fifth and final entry in a series where we build a simple spreadsheet engine, with Vue frontend. In this section we clean up some edge cases, and add the final feature: the ability to add increase the size of the sheet by adding new rows and columns. You click on a row/column, then click “insert before” or “insert after” to add a row/column.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/insert-row.png" alt="" /></p>
+<p>You can find the final implementation including the exercises in the <a href="https://github.com/lmiller1990/spreadsheet">GitHub repository</a>.</p>
+<h2>Typing up some loose ends</h2>
+<p>We have a few functions that only works under very specific circumstances at the moment; specifically <code class="inline">updateCell</code> will error out if the <code class="inline">cell</code> doesn’t exist, and <code class="inline">deriveFormula</code> only works if all the cells contain valid numbers. Let’s fix those, starting with <code class="inline">deriveFormula</code>. We can use TDD to make this easier. The current test for <code class="inline">deriveFormula</code> looks like this:</p>
+<pre><code class="ts lang-ts language-ts">test(&#39;deriveFormula&#39;, () =&gt; {
+  const sheet = createSheet()
+  const actual = deriveFormula(sheet.states[0], sheet.states[0][&#39;b2&#39;])
+  expect(actual).toBe(&#39;300&#39;)
+})</code></pre>
+<p>This is the “happy path” where every cell is a number and the formula (which is =SUM(a1, a1)). Add a “sad” path:</p>
+<pre data-line="8-17"><code class="ts lang-ts language-ts">describe(&#39;deriveFormula&#39;, () =&gt; {
+  it(&#39;returns sum on the happy path&#39;, () =&gt; {
+    const sheet = createSheet()
+    const actual = deriveFormula(sheet.states[0], sheet.states[0][&#39;b2&#39;])
+    expect(actual).toBe(&#39;300&#39;)
+  })
+
+  it(&#39;handles missing values&#39;, () =&gt; {
+    const state: Cells = { 
+      &#39;a1&#39;: {
+        value: &#39;=SUM(a2)&#39;,
+        type: &#39;formula&#39;
+      },
+    }
+    const actual = deriveFormula(state, state[&#39;a1&#39;])
+    expect(actual).toBe(&#39;NaN&#39;)
+  })
+})</code></pre>
+<p>In this case, <code class="inline">a2</code> does not exist, so we get an error when running the test. I’ve decided the best way to handle an invalid formula calculation is just return NaN. Update <code class="inline">deriveFormula</code>:</p>
+<pre data-line="3-16"><code class="ts lang-ts language-ts">export function deriveFormula(state: Cells, cell: Cell): string {
+  const [_, matches] = cell.value.match(/=SUM\((.*)\)/)
+  const indexes = matches.split(&#39;,&#39;)
+  const invalid = indexes.some(x =&gt; {
+    if (!state[x.trim()]) {
+      return true
+    }
+
+    if (isNaN(parseInt(state[x.trim()].value))) {
+      return true
+    }
+  })
+
+  if (invalid) {
+    return &#39;NaN&#39;
+  }
+
+  const numbers = values.map(x => parseInt(state[x.trim()].value))
+  return numbers.reduce((acc, curr) => acc + curr, 0).toString()
+}</code></pre>
+<p>I added a check to see if either the cell doesn’t exist, or the value is not a number. The test passes!</p>
+<h2>Updating updateCell</h2>
+<p><code class="inline">updateCell</code> has a problem, too; it assumes the cell exists in the spreadsheet data structure. We define a spreadsheet like this:</p>
+<pre><code class="ts lang-ts language-ts">const sheet = {
+  states: [
+    {
+      a1: {...}
+      b4: {...}
+    }
+  ]
+}</code></pre>
+<p>We render blank cells in the UI for the cells that are not defined (eg a2, a3, b1, b2, b3 in this case). When the user attempts to add a value to a cell that is not defined explicitly in the <code class="inline">sheet</code> state, it will error out:</p>
+<pre><code class="ts lang-ts language-ts">export function updateCell(state: Cells, cell: UpdateCell) { 
+  newState[cell.index].value = cell.value
+  newState[cell.index].type = inferType(cell)
+  return newState 
+}</code></pre>
+<p><code class="inline">newState[cell.index].value = cell.value</code> assumes <code class="inline">newState[cell.index]</code> exists. What we need to do is create the cell, if it doesn’t already. Update <code class="inline">updateCell</code>:</p>
+<pre data-line="2-9"><code class="ts lang-ts language-ts">export function updateCell(state: Cells, cell: UpdateCell) {
+  const newState: Cells = JSON.parse(JSON.stringify(state))
+
+  if (!newState[cell.index]) {
+    newState[cell.index] = { 
+      value: &#39;&#39;,
+      type: &#39;primitive&#39;
+    }
+  }
+
+  newState[cell.index].value = cell.value
+  newState[cell.index].type = inferType(cell) 
+  return newState 
+}</code></pre>
+<p>Easy - just define a new, empty primitive and let the rest of the logic do it’s job.</p>
+<h2>Implementing insertRow</h2>
+<p>Now to add the new feature - an <code class="inline">insertRow</code> function. I’d like to be able to insert a row before <em>or</em> after a selected row (or column). I will just be implementing <code class="inline">insertRow</code>. <code class="inline">insertColumn</code> is similar, and I will leave it as an exercise (see the source code for the final solution).</p>
+<p>So when inserting a row, we need two things: the row in question, and whether we are inserting before or after. Let’s start with some tests. You might notice something a little strange - read on.</p>
+<pre><code class="ts lang-ts language-ts">describe(&#39;insertRow&#39;, () =&gt; {
+  it(&#39;inserts a row in between two rows&#39;, () =&gt; {
+    const state: Cells = {
+      &#39;a1&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;1&#39;
+      }, 
+      &#39;a2&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;2&#39;
+      },
+    }
+    const expected: Cells = {
+      &#39;a1&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;1&#39;
+      },
+      &#39;a3&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;2&#39;
+      },
+    }
+    const actual = insertRow(state, { at: 1, position: &#39;after&#39; })
+    expect(actual).toEqual(expected)
+  })
+
+  it(&#39;inserts a row at the end&#39;, () =&gt; {
+    const state: Cells = {
+      &#39;a1&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;1&#39;
+      },
+    }
+    const expected: Cells = {
+      &#39;a1&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;1&#39;
+      },
+      &#39;a2&#39;: {
+        type: &#39;primitive&#39;,
+        value: &#39;&#39;
+      },
+    }
+    const actual = insertRow(state, { at: 1, position: &#39;after&#39; })
+    expect(actual).toEqual(expected)
+  })
+})</code></pre>
+<p>You might expect that given:</p>
+<pre><code class="ts lang-ts language-ts">{
+  &#39;a1&#39;: {
+    type: &#39;primitive&#39;,
+    value: &#39;1&#39;
+  }, 
+  &#39;a2&#39;: {
+    type: &#39;primitive&#39;,
+    value: &#39;2&#39;
+  }
+}</code></pre>
+<p>When inserting a row, you might get:</p>
+<pre><code class="ts lang-ts language-ts">{
+  &#39;a1&#39;: {
+    type: &#39;primitive&#39;,
+    value: &#39;1&#39;
+  }, 
+  &#39;a2&#39;: {
+    type: &#39;primitive&#39;,
+    value: &#39;&#39;
+  },
+  &#39;a3&#39;: {
+    type: &#39;primitive&#39;,
+    value: &#39;2&#39;
+  }
+}</code></pre>
+<p>But this doesn’t fit into our data structure and model. Remember, we only want to save cells in our data structure that actually have some content - any empty row does not, so all we need to do is increase the row number for any row appearing <em>after</em> the point we inserted a row. In this case <code class="inline">a2</code> becomes <code class="inline">a3</code>. The <code class="inline">render</code> function will take care of rendering empty cells on the second row for us.</p>
+<p>Now the implementation:</p>
+<pre><code class="ts lang-ts language-ts">export interface InsertRow {
+  at: number // 1, 2, 3...
+  position: &#39;before&#39; | &#39;after&#39;
+}
+
+export function insertRow(state: Cells, { at, position }: InsertRow): Cells {
+  // at the end
+  const { rows } = calcMaxDimensions(state)
+  if (rows === at) {
+    const newState: Cells = JSON.parse(JSON.stringify(state))
+    newState[`a${rows + 1}`] = { type: &#39;primitive&#39;, value: &#39;&#39; }
+    return newState
+  } 
+
+  // inserting in between existing rows
+  const newState: Cells = {}
+
+  for (const key of Object.keys(state)) {
+    const [_, col, row] = key.match(/(\w.*?)(\d.*)/)
+
+    if (parseInt(row) &lt;= at) {
+      newState[`${col}${row}`] = state[`${col}${row}`]
+    } else {
+      newState[`${col}${parseInt(row) + 1}`] = state[`${col}${row}`]
+    } 
+  }
+
+  return newState
+}</code></pre>
+<p>There are two cases to consider: when inserting a new row at the very end of the table, and adding a row in the middle of the table.</p>
+<p>For scenario 1, a row at the end of the table, we just add a new row on with an empty <code class="inline">primitive</code> cell. No need to increase the other cell’s row index by 1. We can determine if this is the case by checking if the <code class="inline">at</code> value (the row we want to insert “at”) is the same as the total rows in the table. We can do this easily using our <code class="inline">calcMaxDimensions</code> function. </p>
+<p>In the case we want to add a row in the middle of the table, we need to increase the row for all following rows. For example, if our sheet has 2 rows, and we want to insert a new row after the first row, we should increase all the following rows by 1.</p>
+<p>For now, I am assuming we are inserting <em>after</em> the supplied row number - I will leave <code class="inline">before</code> as an exercise, (see the source code for the solution).</p>
+<h2>Updating the UI</h2>
+<p>Now we have all the tools needed to insert rows to the spreadsheet - let’s update the UI so the user can actually insert a new row! We need a way to specify after which row to insert to a new row - let’s add a new variable and function to track this. Add it in to the sheet composable, (<code class="inline">composables/sheet.ts</code>). I will also add an <code class="inline">insertRowAfter</code> function which wraps <code class="inline">insertRow</code>:</p>
+<pre data-line="6, 8-10, 12-16, 20-21, 23"><code class="ts lang-ts language-ts">import { computed, reactive, ref, readonly } from &#39;vue&#39;
+import { Sheet, render, UpdateCell, updateCell, insertRow } from &#39;../spreadsheet&#39;
+
+// ... removed for brevity ... 
+
+const selectedCell = ref&lt;number&gt;()
+
+function setSelectedCell(cell: number) {
+  selectedCell.value = cell
+}
+
+function insertRowAfter(row: number) {
+  const newState = insertRow(sheet.states[currentStateIndex.value], { at: row, position: &#39;after&#39; })
+  sheet.states.push(newState)
+  currentStateIndex.value += 1
+}
+
+export function useSheet() {
+  return {
+    selectedCell: readonly(selectedCell),
+    insertRowAfter,
+    sheet,
+    setSelectedCell,
+    update,
+    currentStateIndex
+  }
+}</code></pre>
+<p>I have also made <code class="inline">selectedCell</code> readonly - I’d like to enforce updating the <code class="inline">selectedCell</code> with a <code class="inline">setSelectedCell</code> function. We are sticking to the idea of immutability and ensuring undo/redo continue working by creating a brand new state when we insert a row, and incrementing <code class="inline">currentStateIndex</code>.</p>
+<p>Update <code class="inline">app.vue</code> to use the new functions, and add a button so the user can actually insert a row:</p>
+<pre data-line="4-9,34,35,39-42"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;button @click=&quot;undo&quot;&gt;Undo&lt;/button&gt;
+  &lt;button @click=&quot;redo&quot;&gt;Redo&lt;/button&gt;
+  &lt;button 
+    v-if=&quot;selectedCell&quot; 
+    @click=&quot;insertRowAfter&quot;
+  &gt;
+    Insert row after
+  &lt;/button&gt;
+  &lt;spreadsheet-header :colCount=&quot;sheet[0].length&quot; /&gt;
+  &lt;spreadsheet-body :rows=&quot;sheet&quot; /&gt;
+&lt;pre v-for=&quot;state in states&quot;&gt;
+{{ state }}
+&lt;/pre&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { computed, reactive } from &#39;vue&#39;
+import { useSheet } from &#39;./composables/sheet&#39;
+import { Sheet, render } from &#39;./spreadsheet&#39;
+import SpreadsheetHeader from &#39;./spreadsheet-header.vue&#39;
+import SpreadsheetBody from &#39;./spreadsheet-body.vue&#39;
+
+export default {
+  components: {
+    SpreadsheetHeader,
+    SpreadsheetBody
+  },
+
+  setup() {
+    const { 
+      sheet, 
+      currentStateIndex, 
+      selectedCell,
+      insertRowAfter
+    } = useSheet()
+
+    return {
+      insertRowAfter: () =&gt; {
+        insertRowAfter(selectedCell.value)
+      },
+      selectedCell: computed(() =&gt; selectedCell.value),
+      undo: () =&gt; currentStateIndex.value -= 1,
+      redo: () =&gt; currentStateIndex.value += 1,
+      sheet: computed(() =&gt; render(sheet.states[currentStateIndex.value])),
+      states: computed(() =&gt; sheet.states.map(render))
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Next we will extract a component used for the non-editable cells - the row and column labels. Call it <code class="inline">spreadsheet-label-cell</code>. Update <code class="inline">spreadsheet-body.vue</code> to use it:</p>
+<pre data-line="3, 17,25"><code class="html lang-html language-html">&lt;template&gt;
+  &lt;tr v-for=&quot;cells in rows&quot;&gt;
+    &lt;spreadsheet-label-cell :label=&quot;cells[0].row&quot; /&gt;
+
+    &lt;spreadsheet-editable-cell 
+      v-for=&quot;cell in cells&quot; 
+      :cell=&quot;cell&quot;
+      :activeCell=&quot;activeCell&quot;
+      @activate=&quot;activate&quot;
+    /&gt;
+  &lt;/tr&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { Ref, ref, nextTick } from &#39;vue&#39;
+import { UICell } from &#39;./spreadsheet&#39;
+import SpreadsheetEditableCell from &#39;./spreadsheet-editable-cell.vue&#39;
+import SpreadsheetLabelCell from &#39;./spreadsheet-label-cell.vue&#39;
+
+// ... brevity ...
+
+export default {
+  components: {
+    SpreadsheetEditableCell,
+    SpreadsheetLabelCell,
+  },
+
+  // ... brevity ...
+}
+&lt;/script&gt;</code></pre>
+<p>Finally, the implementation of <code class="inline">spreadsheet-label-cell.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;td @click=&quot;select&quot;&gt;
+    &lt;span&gt;
+      {{ label }}
+    &lt;/span&gt;
+  &lt;/td&gt;
+&lt;/template&gt;
+
+&lt;script lang=&quot;ts&quot;&gt;
+import { useSheet } from &#39;./composables/sheet&#39;
+
+export default {
+  props: {
+    label: {
+      type: String
+    }
+  },
+
+  setup(props) {
+    const { setSelectedCell } = useSheet()
+
+    const select = () =&gt; {
+      setSelectedCell(parseInt(props.label))
+    }
+
+    return {
+      select
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>That’s it! You can now click a row then click “insert row after” and it will insert a new row. Formulas will recalculate appropriately, as well.</p>
+<h2>Conclusion and Improvements</h2>
+<p>I left a few features out intentionally. As exercises, try adding:</p>
+<ul>
+<li>insert row before (we only covered after, but we defined the <code class="inline">position</code> which can be either <code class="inline">before</code> or <code class="inline">after</code>
+</li>
+<li>insert a column before/after
+</li>
+<li>add some tests using Vue Test Utils for the UI layer
+</li>
+</ul>
+<p>You can find the final implementation including the exercises in the <a href="https://github.com/lmiller1990/spreadsheet">GitHub repository</a>.</p>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
