@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20201107 Renderless Components in Vue 3
+  </h1>
+
+  <div class="post_body">
+    <p>The “renderless components” pattern is something that has been around for a while, but hasn’t gained (much) mainstream popularity. It’s a really powerful abstraction to build re-useable components. </p>
+<p>The source code for this article is <a href="https://gist.github.com/lmiller1990/48c4fd841b67eaa4f226011f70351daf">available here</a>.</p>
+<p>Let’s see a simple example:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/renderless/ss1.png" alt="" /></p>
+<p>In this image there are three inputs rendered. The markup and style is slightly different:</p>
+<ol>
+<li>The first input has the validation below the input.
+</li>
+<li>The second input has the validation to the right.
+</li>
+<li>The third input has the validation to the left, and it’s slightly smaller.
+</li>
+</ol>
+<p>These may seem like tiny customizations, but many UI frameworks make it very difficult to move things around like this! The idea of a renderless component is it has <em>no opinion on how things look</em>. In the above example, the renderless component exposes validation, but no specific markup - the developer can decide where and how things are rendered, without needing to re-implement validation.</p>
+<p>There are many benefits to this approach. Every tried to use an input (eg <code class="inline">vue-multiselect</code>) and had to hack the styling to pieces to get it to fit in with your application’s theme? Or do something dirty to get Vuetify to look how you want? Yeah, me too. This is the problem renderless components solves. A great pattern for a component you are thinking about publishing on npm.</p>
+<h2>Getting Started</h2>
+<p>In this example we will work with two components: <code class="inline">app.vue</code>, which is where the developer is using the input, and <code class="inline">v-input.vue</code>, which is the renderless component. This is something you could be importing from a library, or installing from npm. This means:</p>
+<ul>
+<li><code class="inline">app</code> is the specific to your application
+</li>
+<li><code class="inline">v-input</code> is not. It should be re-usable and unopinionated.
+</li>
+</ul>
+<p>Start with <code class="inline">app.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;v-input&gt;
+    Hello
+  &lt;/v-input&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import VInput from &#39;./v-input.vue&#39;
+
+export default {
+  components: { VInput }
+}
+&lt;/script&gt;</code></pre>
+<p>And a minimal <code class="inline">v-input.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+export default {
+  setup(props, ctx) {
+    return () =&gt; ctx.slots.default()
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Notice there is</p>
+<ul>
+<li>no render function with <code class="inline">h</code>
+</li>
+<li>no <code class="inline">&lt;template&gt;</code>
+</li>
+</ul>
+<p>That’s because it’s <em>renderless</em>. The trick is <code class="inline">return () =&gt; ctx.slots.default()</code>. This will evaluate to the “Hello” text node we passed in <code class="inline">&lt;app&gt;</code>.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/renderless/ss2.png" alt="" /></p>
+<p>Let’s render something a bit more useful - starting with an <code class="inline">&lt;input&gt;</code>.</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;v-input &gt;
+    &lt;input v-model=&quot;username&quot; /&gt;
+  &lt;/v-input&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { ref } from &#39;vue&#39;
+import VInput from &#39;./v-input.vue&#39;
+
+export default {
+  components: { VInput },
+  setup() {
+    return {
+      username: ref(&#39;&#39;)
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Stll no need to update <code class="inline">&lt;v-input</code>&gt;:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/renderless/ss3.png" alt="" /></p>
+<h2>Child -&gt; Parent Communication</h2>
+<p>Now to add the validation logic. We want a <code class="inline">min</code> and <code class="inline">max</code> length, so we will need to pass those to the <code class="inline">&lt;v-input&gt;</code>. We also need to pass the <code class="inline">username</code> to be validated. No problem here - we can use <code class="inline">props</code>. </p>
+<p>What we also need to do is validate the username in <code class="inline">&lt;v-input&gt;</code> and pass any validation errors <em>back to the parent</em> - that is to say, child -&gt; parent communication. One way to do this is <code class="inline">emit</code> - but there is a more idiomatic way for renderless components, <code class="inline">v-slot</code>.</p>
+<p>Update <code class="inline">app.vue</code> to pass the relevant props. I am also destructuring on <code class="inline">v-slot</code> and grabbing an <code class="inline">error</code> property. More on that soon.</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;v-input &gt;
+  &lt;v-input 
+    v-slot=&quot;{ error }&quot;
+    :min=&quot;5&quot;
+    :max=&quot;10&quot;
+    :value=&quot;username&quot;
+  &gt;
+    &lt;input v-model=&quot;username&quot; /&gt;
+    &lt;div v-if=&quot;error&quot; class=&quot;error&quot;&gt;
+      {{ error }}
+    &lt;/div&gt;
+  &lt;/v-input&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { ref } from &#39;vue&#39;
+import VInput from &#39;./v-input.vue&#39;
+
+export default {
+  components: { VInput },
+  setup() {
+    return {
+      username: ref(&#39;&#39;)
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>Here comes some more renderless comoponent magic. Update <code class="inline">v-input.vue</code>:</p>
+<pre><code class="html lang-html language-html">&lt;script&gt;
+function getError(value, { min, max }) {
+  if (!value) {
+    return &#39;Required&#39;
+  }
+
+  if (value.length &lt; min) {
+    return `Min is ${min}`
+  }
+
+  if (value.length &gt; max) {
+    return `Max is ${max}`
+  }
+}
+
+import { computed } from &#39;vue&#39;
+
+export default {
+  props: [&#39;min&#39;, &#39;max&#39;, &#39;value&#39;],
+  setup(props, ctx) {
+    const error = computed(() =&gt; getError(
+      props.value,
+      { min: props.min, max: props.max }
+    ))
+
+    return () =&gt; ctx.slots.default({
+      error: error.value
+    })
+  }
+}
+&lt;/script&gt;</code></pre>
+<p>This is cool. We can pass computed and reactive values from the default slot back to the parent by passing an object into <code class="inline">ctx.slots.default()</code>. That is then available via destructuring and <code class="inline">v-slot</code>.</p>
+<p>I added some styling - it works! I tried making another version by moving the markup around, too. Now the developer is free to manipulate the markup however they like, and take full advantage of the re-usable business logic in the renderless <code class="inline">&lt;v-input&gt;</code> component.</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/renderless/ss4.png" alt="" /></p>
+<h2>A More Complex Example</h2>
+<p>I expanded this idea and make a renderless password complexity component. </p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/renderless/ss5.png" alt="" /></p>
+<p>You can grab the full source and tutorial in my upcoming book, <a href="https://lachlan-miller.me/design-patterns-for-vuejs">Design Patterns for Vue.js: A test driven approach to maintainable applications</a>.</p>
+<p>The source code for this article is <a href="https://gist.github.com/lmiller1990/48c4fd841b67eaa4f226011f70351daf">available here</a>.</p>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
