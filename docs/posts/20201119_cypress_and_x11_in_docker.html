@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20201119 Cypress and X11 in Docker
+  </h1>
+
+  <div class="post_body">
+    <p>Setting up a complex stack for end-to-end tests is difficult and time consuming. Docker and docker-compose help solve this, at least in terms of running the various systems. You won’t get a GUI though. Thit post looks at how you can run Cypress in a docker container and still use the interactive test runner using X11 to forward the UI to the host machine.</p>
+<p>It looks like the best way to do this is to use <a href="https://en.wikipedia.org/wiki/X_Window_System">X Window System</a>. This also shows up in Google searches as X11 and X Server, which is confusing.</p>
+<p>After some digging it turns out these names refer to subtly different things.</p>
+<ul>
+<li>X11 is a protocol. Specifically, the 11th version of the X protocol. It has been at version 11 since 1987 - it probably won’t change.
+</li>
+<li>X Window System refers to the software architecture. So the ideas and framework around X11, and what an implementation needs to do to be X11 compliant.
+</li>
+<li>X.Org Server is the current reference implementation of the X Window System. It implements X11 (the latest version) of the protocol.
+</li>
+</ul>
+<p>I am using a Mac for development. The reference implementation, <a href="https://www.x.org/wiki/">X.org</a> is for Unix and Unix like environments. Luckily, there is a version (fork?) specifically for Mac OS - <a href="https://www.xquartz.org/">XQuartz</a>. You want to download and install this.</p>
+<h2>Running Firefox in Debian + X11 Forwarding</h2>
+<p>Before messing around with Cypress, let’s try and run Firefox in docker and forward the GUI using X11. The image I will use is <code class="inline">jess/firefox</code> (so grab it with <code class="inline">docker pull jess/firefox</code>).</p>
+<p>We will add arguments one by one until everything works. Start off with the minimal command to run Firefox:</p>
+<pre><code class=" lang- language-">docker run --rm --name firefox jess/firefox</code></pre>
+<p>I get this error:</p>
+<pre><code class=" lang- language-">(firefox:1): Gtk-WARNING **: 05:50:11.788: Locale not supported by C library.
+Using the fallback &#39;C&#39; locale.
+Error: no DISPLAY environment variable specified</code></pre>
+<p>I don’t know what the first part is - it’s a warning, so I should probably find out what it means at some point. For now we are concerned with: “Error: no DISPLAY environment variable specified”. We need a <code class="inline">DISPLAY</code> environment variable. What it should be isn’t entirely clear. You can see what yours is using <code class="inline">echo $DISPLAY</code>. One of my machines had nothing. The other had some random file I don’t really understand with a path like <code class="inline">/private/tmp/com.apple.launchd......</code>. Neither of these is what we want. It should be set to the machine that will be the “host” for the X Window Server - the one where you want to show the GUI. In this case, the machine you are currently using.</p>
+<h2>Getting Your Internal IP</h2>
+<p>There are many ways to get your internal IP. We will see the easy way, and the ninja way (which you can use in a script, so it’s more convenient).</p>
+<p>Normal way:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/cyx11ip.png" alt="" /></p>
+<p>Or the ninja way using <code class="inline">ifconfig</code>. Run <code class="inline">ifconfig</code> if you like - you get a ton of network info. Each block has a name, like <code class="inline">en0</code>, <code class="inline">lo0</code> etc. You can read about them <a href="https://stackoverflow.com/a/55232331/5231961">here</a>. We want <code class="inline">en0</code>, that’s the main internet port (en was for Ethernet, but now-days it is usually WiFi). Run <code class="inline">ifconfig en0</code>:</p>
+<pre><code class=" lang- language-">$ ifconfig en0
+en0: flags=8863&lt;UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST&gt; mtu 1500
+ether f8:ff:c2:29:7b:4c
+inet6 fe80::cf5:ef5:b21c:ad71%en0 prefixlen 64 secured scopeid 0x9
+inet 10.1.1.110 netmask 0xffffff00 broadcast 10.1.1.255
+inet6 fddd:1b57:f3ad::1cce:189f:77d3:1e4b prefixlen 64 autoconf secured
+inet6 fddd:1b57:f3ad::d533:3d47:fbe2:7423 prefixlen 64 autoconf temporary
+nd6 options=201&lt;PERFORMNUD,DAD&gt;
+media: autoselect
+status: active</code></pre>
+<p>We want the internal IP address from the <code class="inline">inet</code> line. I don’t know what the others are for yet, but I will find out one day. <code class="inline">grep</code> for it:</p>
+<pre><code class=" lang- language-">$ ifconfig en0 | grep inet
+inet6 fe80::cf5:ef5:b21c:ad71%en0 prefixlen 64 secured scopeid 0x9
+inet 10.1.1.110 netmask 0xffffff00 broadcast 10.1.1.255
+inet6 fddd:1b57:f3ad::1cce:189f:77d3:1e4b prefixlen 64 autoconf secured
+inet6 fddd:1b57:f3ad::d533:3d47:fbe2:7423 prefixlen 64 autoconf temporary</code></pre>
+<p>Finally we can use <code class="inline">awk</code> to get the IP address:</p>
+<pre><code class=" lang- language-">$ ifconfig en0 | grep inet | awk &#39;$1==&quot;inet&quot; {print $2}&#39;
+10.1.1.110</code></pre>
+<p>We match the line where the first word is <code class="inline">inet</code> (<code class="inline">$0</code> represents the entire line in <code class="inline">awk</code>) then we print out the 2nd word.</p>
+<h2>Running with a DISPLAY environment variable</h2>
+<p>Try running Firefox in docker, this time providing a <code class="inline">DISPLAY</code> environment variable:</p>
+<pre><code class=" lang- language-">$ DISPLAY=$(ifconfig en0 | grep inet | awk &#39;$1==&quot;inet&quot; {print $2}&#39;) \
+docker run --rm --name firefox -e DISPLAY=$DISPLAY:0 jess/firefox</code></pre>
+<p>I get:</p>
+<pre><code class=" lang- language-">: Gtk-WARNING **: 06:26:29.131: Locale not supported by C library.
+Using the fallback &#39;C&#39; locale.
+No protocol specified
+Unable to init server: Broadway display type not supported: 10.1.1.110:0
+Error: cannot open display: &lt;DISPLAY&gt;</code></pre>
+<p>Where <code class="inline">&lt;DISPLAY&gt;</code> will be different, depending on your system. One was the <code class="inline">/tmp/...</code> file from earlier, one was my <code class="inline">10.1.1.110:0</code> (my internal IP address).</p>
+<p>Note that I added <code class="inline">:0</code> to the <code class="inline">DISPLAY</code> - that indicates the first “graphics controller” - again another term I don’t fully understand.</p>
+<h2>Open XQuartz</h2>
+<p>Open XQuartz, the X Window Server implementation for Mac. I had to go to “Preferences” (cmd + ,) -&gt; Security -&gt; Check Allow connections from network clients”. I then had to <em>restart</em> my computer. Weird. I am not sure if this is always necessary but a lot of guides recommended it.</p>
+<p>If you do a <code class="inline">ls -la ~/. | grep X</code> you will notice a ~/.Xauthority file was created. It is a cookie used for authenticating X sessions. <a href="https://askubuntu.com/questions/300682/what-is-the-xauthority-file">See more here.</a>.</p>
+<p>Finally, we need a few more command line arguments.</p>
+<pre><code class=" lang- language-">DISPLAY=$(ifconfig en0 | grep inet | awk &#39;$1==&quot;inet&quot; {print $2}&#39;) \
+docker run --rm --name firefox \
+-e DISPLAY=$DISPLAY:0 \
+-e XAUTHORITY=/.Xauthority \
+-v ~/.Xauthority:/.Xauthority \
+jess/firefox</code></pre>
+<p>The new arguments are:</p>
+<ul>
+<li><code class="inline">-v ~/.Xauthority:/.Xauthority</code>. It maps the <code class="inline">.Xauthority</code> file on the host machine (your Mac) to a file called <code class="inline">.Xauthority</code> in the root directory of the docker container. 
+</li>
+<li><code class="inline">-e XAUTHORITY=/.Xauthority</code>. Sets the <code class="inline">XAUTHORITY</code> environment variable to be that file. This will let the X Window server authenticate.
+</li>
+</ul>
+<p>If I didn’t miss anything, and neither did you, you should be able to run that command and run Firefox in a Debian locally!</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/cyx11ff.png" alt="" /></p>
+<h2>Cypress</h2>
+<p>Now we understand X11, we can apply this same approach to Cypress. I got a lot of information from <a href="https://www.cypress.io/blog/2019/05/02/run-cypress-with-a-single-docker-command/">this blog post</a>.</p>
+<p>First I created a new Cypress project by installing Cypress with <code class="inline">yarn add cypress</code>. I ran Cypress once with <code class="inline">yarn cypress open</code>. It created a <code class="inline">cypress</code> directory with a bunch of example tests.</p>
+<p>Now, run Cypress!</p>
+<pre><code class=" lang- language-">DISPLAY=$(ifconfig en0 | grep inet | awk &#39;$1==&quot;inet&quot; {print $2}&#39;) \
+docker run --rm --name firefox \
+-e DISPLAY=$DISPLAY:0 \
+-e XAUTHORITY=/.Xauthority \
+-v ~/.Xauthority:/.Xauthority \
+-v $PWD:/e2e \
+-w /e2e \
+--entrypoint cypress cypress/included:3.2.0 open --project .</code></pre>
+<p>The main changes are:</p>
+<ul>
+<li><code class="inline">--entrypoint cypress</code>. The Cypress binary is installed <em>globally</em> in this image. It will receive any arguments after the image - in this case <code class="inline">open --project .</code>. This will open the interactive runner and set the project directory to the current working directory.
+</li>
+<li><code class="inline">-v $PWD:/e2e</code>. Map the current directory on the host (your laptop) to a directory called <code class="inline">/e2e</code> in the docker container. You can replace <code class="inline">/e2e</code> with anything.
+</li>
+<li><code class="inline">-w /e2e</code> set the current working directory in the container to <code class="inline">/e2e</code>. It’s like doing <code class="inline">cd /e2e</code> in the container.
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/cyx11cy.png" alt="" /></p>
+<h2>Conclusion:</h2>
+<ul>
+<li>X11 is a protocol.
+</li>
+<li>X Window System is a framework designed aroudn X11.
+</li>
+<li>X.org is the reference implementation. XQuartz is a Mac OS compatible fork.
+</li>
+<li>To use X11 with Docker, you need X11 and a <code class="inline">DISPLAY</code> variable. <code class="inline">DISPLAY</code> is the host machine’s IP. Include <code class="inline">:0</code> to specify the first graphics device.
+</li>
+<li>X Window System uses the <code class="inline">XAUTHORITY</code> environment variable and the session cookie is located at <code class="inline">~/.Xauthority</code>.
+</li>
+</ul>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
