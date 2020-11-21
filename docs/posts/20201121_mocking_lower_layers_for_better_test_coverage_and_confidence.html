@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="show.css">
+  <link rel="stylesheet" href="prism.css">
+  <link rel="stylesheet" href="prism-highlight.css">
+  <title></title>
+</head>
+<body>
+  <h1 class="title">
+    20201121 Mocking Lower Layers for Better Test Coverage and Confidence
+  </h1>
+
+  <div class="post_body">
+    <p>Something almost every Vue.js application is going to do is make HTTP requests to an API of some sort. This could be for authentication, loading data, or something else. Many patterns have emerged to manage HTTP requests, and even more to test them.</p>
+<p>This chapter looks at various ways to architecture your HTTP requests, different ways to test them, and discusses the pros and cons of each approach.</p>
+<h2>The Login Component</h2>
+<p>The example I will use is the <code class="inline">&lt;login&gt;</code> component. It lets the user enter their username and password and attempt to authenticate. We want to think about:</p>
+<ul>
+<li>where should the HTTP request be made from? The component, another module, in a store (like Vuex?)
+</li>
+<li>how can we test each of these approaches?
+</li>
+</ul>
+<p>There is no one size fits all solution here. I’ll share how I currently like to structure things, but also provide my opinion on other architectures.</p>
+<h2>Starting Simple</h2>
+<p>If you application is simple, you probably won’t need something like Vuex or a specific HTTP request module. You can just inline everything in your component:</p>
+<pre><code class="html lang-html language-html">&lt;template&gt;
+  &lt;h1 v-if=&quot;user&quot;&gt;
+    Hello, {{ user.name }}
+  &lt;/h1&gt;
+  &lt;form @submit.prevent=&quot;handleAuth&quot;&gt;
+    &lt;input v-model=&quot;formData.username&quot; role=&quot;username&quot; /&gt;
+    &lt;input v-model=&quot;formData.password&quot; role=&quot;password&quot; /&gt;
+    &lt;button&gt;Click here to sign in&lt;/button&gt;
+  &lt;/form&gt;
+  &lt;span v-if=&quot;error&quot;&gt;{{ error }}&lt;/span&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import axios from &#39;axios&#39;
+
+export default {
+  data() {
+    return {
+      username: &#39;&#39;,
+      password: &#39;&#39;,
+      user: undefined,
+      error: &#39;&#39;
+    }
+  },
+
+  methods: {
+    async handleAuth() {
+      try {
+        const response = await axios.post(&#39;/login&#39;)
+        this.user = response.data
+      } catch (e) {
+        this.error = e.response.data.error
+      }
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p align="center">Snippet: A simple login form component, It makes a request using axios.</p><p>This example uses the axios HTTP library, but the same ideas apply if you are using fetch.</p>
+<p>We don’t actually want to make a request to a real server when testing this component - unit tests should run in isolation. One option here is to mock the <code class="inline">axios</code> module with <code class="inline">jest.mock</code>. </p>
+<p>We probably want to test:</p>
+<ul>
+<li>is the correct endpoint used?
+</li>
+<li>is the correct payload included?
+</li>
+<li>does the DOM update accordingly based on the response?
+</li>
+</ul>
+<p>A test where the user successfully authenticates might look like this:</p>
+<pre><code class="js lang-js language-js">import { render, fireEvent, screen } from &#39;@testing-library/vue&#39;
+import App from &#39;./app.vue&#39;
+
+let mockPost = jest.fn()
+jest.mock(&#39;axios&#39;, () =&gt; ({
+  post: (url, data) =&gt; {
+    mockPost(url, data)
+    return Promise.resolve({
+      data: { name: &#39;Lachlan&#39; }
+    })
+  }
+}))
+
+describe(&#39;login&#39;, () =&gt; {
+  it(&#39;successfully authenticates&#39;, async () =&gt; {
+    render(App)
+    await fireEvent.update(
+      screen.getByRole(&#39;username&#39;), &#39;Lachlan&#39;)
+    await fireEvent.update(
+      screen.getByRole(&#39;password&#39;), &#39;secret-password&#39;)
+    await fireEvent.click(screen.getByText(&#39;Click here to sign in&#39;))
+
+    expect(mockPost).toHaveBeenCalledWith(&#39;/login&#39;, {
+      username: &#39;Lachlan&#39;,
+      password: &#39;secret-password&#39;
+    })
+    await screen.findByText(&#39;Hello, Lachlan&#39;)
+  })
+})</code></pre>
+<p align="center">Snippet: Using a mock implementation of axios to test the login workflow.</p><p>Testing a failed request is straight forward as well - you would just throw an error in the mock implementation. </p>
+<p>If you are working on anything other than a trivial application, you probably don’t want to store the response in component local state. The most common way to scale a Vue app has traditionally been Vuex. More often than not, you end up with a Vuex store that looks like this:</p>
+<pre><code class="js lang-js language-js">import axios from &#39;axios&#39;
+
+export const store = {
+  state() {
+    return {
+      user: undefined
+    }
+  },
+  mutations: {
+    updateUser(state, user) {
+      state.user = user 
+    }
+  },
+  actions: {
+    login: async ({ commit }, { username, password }) =&gt; {
+      const response = await axios.post(&#39;/login&#39;, { username, password })
+      commit(&#39;updateUser&#39;, response.data)
+    }
+  }
+}</code></pre>
+<p align="center">Snippet: A simple Vuex store.</p><p>There are many strategies for error handling in this set up. You can have a local <code class="inline">try/catch</code> in the component. Other developers store the error state in the Vuex state, as well.</p>
+<p>Either way, the <code class="inline">&lt;login&gt;</code> component using a Vuex store would look something like this:</p>
+<pre><code class="js lang-js language-js">&lt;template&gt;
+  &lt;!-- no change --&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import axios from &#39;axios&#39;
+
+export default {
+  data() {
+    return {
+      username: &#39;&#39;,
+      password: &#39;&#39;,
+      error: &#39;&#39;
+    }
+  },
+  computed: {
+    user() {
+      return this.$store.state.user
+    }
+  },
+  methods: {
+    async handleAuth() {
+      try {
+        await this.$store.dispatch(&#39;login&#39;, {
+          username: this.username,
+          password: this.password
+        })
+      } catch (e) {
+        this.error = e.response.data.error
+      }
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p align="center">Snippet: Using Vuex in the login component.</p><p>You now need a Vuex store in your test, too. You have a few options. The two most common are:</p>
+<ul>
+<li>use a real Vuex store - continue mocking axios
+</li>
+<li>use a mock Vuex store
+</li>
+</ul>
+<p>The first option would look something like this:</p>
+<pre><code class="js lang-js language-js">import { store } from &#39;./store.js&#39;
+
+describe(&#39;login&#39;, () =&gt; {
+  it(&#39;successfully authenticates&#39;, async () =&gt; {
+    // add 
+    render(App, { store })
+  })
+})</code></pre>
+<p align="center">Snippet: Updating the test to use Vuex.</p><p>I like this option. The only change we made to the test is passing a <code class="inline">store</code>. The actual user facing behavior has not changed, so the test should not need significant changes either - in fact, the actual test code is the same (entering the username and password and submitting the form). It also shows we are not testing implementation details - we were able to make a significant refactor without changing the test (except for providing the Vuex store - we added a dependency, so this is expected).</p>
+<p>To further illustrate this is a good test, I am going to make another refactor and convert the component to use the composition API. Everything <em>should</em> still pass:</p>
+<pre><code class="js lang-js language-js">&lt;template&gt;
+  &lt;!-- no changes --&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { reactive, ref, computed } from &#39;vue&#39;
+import { useStore } from &#39;vuex&#39;
+
+export default {
+  setup () {
+    const store = useStore()
+    const formData = reactive({
+      username: &#39;&#39;,
+      password: &#39;&#39;,
+    })
+    const error = ref(&#39;&#39;)
+    const user = computed(() =&gt; store.state.user)
+
+    const handleAuth = async () =&gt; {
+      try {
+        await store.dispatch(&#39;login&#39;, {
+          username: formData.username,
+          password: formData.password
+        })
+      } catch (e) {
+        error.value = e.response.data.error
+      }
+    }
+
+    return {
+      user,
+      formData,
+      error,
+      handleAuth
+    }
+  }
+}
+&lt;/script&gt;</code></pre>
+<p align="center">Snippet: Converting the component to use the Component API.</p><p>Everything still passes - another indication we are testing the behavior of the component, as opposed to the implementation details.</p>
+<p>I’ve used the real store + axios mock strategy for quite a long time in both Vue and React apps and had a good experience. The only downside is you need to mock <code class="inline">axios</code> a lot - you often end up with a lot of copy-pasting between tests. You can make some utilities methods to avoid this, but it’s still a little boilerplate heavy.</p>
+<p>As your application gets larger and larger, though, using a real store can become complex. Some developers opt to mock the entire store in this scenario. It leads to less boilerplate, for sure, especially if you are using Vue Test Utils, which has a <code class="inline">mocks</code> mounting option designed for mocking values on <code class="inline">this</code>, for example <code class="inline">this.$store</code>. Testing Library does not support this - intentionally - which is a decision I agree with. We can replicate Vue Test Utils’ <code class="inline">mocks</code> feature with <code class="inline">jest.mock</code> to illustrate why I do not recommend mocking Vuex (or whatever store implementation you are using):</p>
+<pre><code class="js lang-js language-js">let mockDispatch = jest.fn()
+jest.mock(&#39;vuex&#39;, () =&gt; ({
+  useStore: () =&gt; ({
+    dispatch: mockDispatch,
+    state: {
+      user: { name: &#39;Lachlan&#39; }
+    }
+  })
+}))
+
+describe(&#39;login&#39;, () =&gt; {
+  it(&#39;successfully authenticates&#39;, async () =&gt; {
+    render(App)
+    await fireEvent.update(
+      screen.getByRole(&#39;username&#39;), &#39;Lachlan&#39;)
+    await fireEvent.update(
+      screen.getByRole(&#39;password&#39;), &#39;secret-password&#39;)
+    await fireEvent.click(screen.getByText(&#39;Click here to sign in&#39;))
+
+    expect(mockDispatch).toHaveBeenCalledWith(&#39;login&#39;, {
+      username: &#39;Lachlan&#39;,
+      password: &#39;secret-password&#39;
+    })
+    await screen.findByText(&#39;Hello, Lachlan&#39;)
+  })
+})</code></pre>
+<p align="center">Snippet: Mocking Vuex. </p><p>Since we are mocking the Vuex store now, we have bypassed <code class="inline">axios</code> entirely. This style of test is tempting at first. There is less code to write. It’s very easy to write. You can also directly set the <code class="inline">state</code> however you like - in the snippet above, <code class="inline">dispatch</code> doesn’t actually update the state.</p>
+<p>Again, the actual test code didn’t change much - we are no longer passing a <code class="inline">store</code> to <code class="inline">render</code> (since we are not even using a store, we mocked it out entirely). We don’t have <code class="inline">mockPost</code> any more - instead we have <code class="inline">mockDispatch</code>. The assertion against <code class="inline">mockDispatch</code> became an assertion that a <code class="inline">login</code> action was dispatched with the correct payload, as opposed to a HTTP call to the correct endpoint.</p>
+<p>There is a big problem. Even if you delete the <code class="inline">login</code> action from the store, the test will <em>continue to pass</em>. This is scary! The tests are all green, which should give you confidence everything is working correctly. In reality, your entire application is completely broken.</p>
+<p>This is not the case with the test using a real Vuex store - breaking the store correctly breaks the tests. There is only one thing worse than a code-base with no tests - a code-base with <em>bad</em> tests. At least if you have not tests, you have no confidence, which generally means you spend more time testing by hand. Tests that give false confidence are actually worse - they lure you into a false sense of security. Everything seems okay, when really it is not.</p>
+<h2>Mock Less - mock the lowest dependency in the chain</h2>
+<p>The problem with the above example is we are mocking too far up the chain. Good tests are as production like as possible. This is the best way to have confidence in your test suite. This diagram shows the dependency chain in the <code class="inline">&lt;login&gt;</code> component:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/api-map.png" alt="" /></p>
+<p align="center">Image: Authentication dependency chain</p><p>The previous test, where we mocked Vuex, mocks the dependency chain here:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/api-vuex.png" alt="" /></p>
+<p align="center">Image: Mocking Vuex</p><p>This means if anything breaks in Vuex, the HTTP call, or the server, our test will not fail.</p>
+<p>The axios test is slightly better - it mocks one layer lower:</p>
+<p><img src="https://raw.githubusercontent.com/lmiller1990/electic/master/screenshots/api-axios.png" alt="" /></p>
+<p align="center">Image: Mocking Axios</p><p>This is better. If something breaks in either the <code class="inline">&lt;login&gt;</code> or Vuex, the test will fail.</p>
+<p>Wouldn’t it be great to avoid mocking <code class="inline">axios</code>, too? This way, we could not need to do:</p>
+<pre><code class="js lang-js language-js">let mockPost = jest.fn()
+jest.mock(&#39;axios&#39;, () =&gt; ({
+  post: (url, data) =&gt; {
+    mockPost(url, data)
+    return Promise.resolve({
+      data: { name: &#39;Lachlan&#39; }
+    })
+  }
+}))</code></pre>
+<p align="center">Snippet: Boilerplate code to mock axios.</p><p>… in every test. And we’d have more confidence, further down the dependency chain.</p>
+<h2>Mock Service Worker</h2>
+<p>A new library has come into the scene relatively recently - Mock Service Worker, or <code class="inline">msw</code> for short. This does exactly what is discussed above - it operates one level lower than <code class="inline">axios</code>, mocking the actual network request! How <code class="inline">msw</code> works will not be explained here, but you can learn more on the <a href="https://mswjs.io/">website</a>: <a href="https://mswjs.io">https://mswjs.io</a>/. One of the cool features is that you can use it both for tests in a Node.js environment and in a browser for local development.</p>
+<p>Let’s try it out. Basic usage is like this:</p>
+<pre><code class="js lang-js language-js">import { rest } from &#39;msw&#39;
+import { setupServer } from &#39;msw/node&#39;
+
+const server = setupServer(
+  rest.post(&#39;/login&#39;, (req, res, ctx) =&gt; {
+    return res(
+      ctx.json({
+        name: &#39;Lachlan&#39;
+      })
+    )
+  })
+)</code></pre>
+<p align="center">Snippet: A basic server with msw.</p><p>The nice thing is we are not mocking <code class="inline">axios</code> anymore. You could change you application to use <code class="inline">fetch</code> instead - and you wouldn’t need to change you tests at all, because we are now mocking at a layer lower than before.</p>
+<p>A full test using <code class="inline">msw</code> looks like this:</p>
+<pre><code class="js lang-js language-js">import { render, fireEvent, screen } from &#39;@testing-library/vue&#39;
+import { rest } from &#39;msw&#39;
+import { setupServer } from &#39;msw/node&#39;
+import App from &#39;./app.vue&#39;
+import { store } from &#39;./store.js&#39;
+
+const server = setupServer(
+  rest.post(&#39;/login&#39;, (req, res, ctx) =&gt; {
+    return res(
+      ctx.json({
+        name: &#39;Lachlan&#39;
+      })
+    )
+  })
+)
+
+describe(&#39;login&#39;, () =&gt; {
+  beforeAll(() =&gt; server.listen())
+  afterAll(() =&gt; server.close())
+
+  it(&#39;successfully authenticates&#39;, async () =&gt; {
+    render(App, { store })
+    await fireEvent.update(
+      screen.getByRole(&#39;username&#39;), &#39;Lachlan&#39;)
+    await fireEvent.update(
+      screen.getByRole(&#39;password&#39;), &#39;secret-password&#39;)
+    await fireEvent.click(screen.getByText(&#39;Click here to sign in&#39;))
+
+    await screen.findByText(&#39;Hello, Lachlan&#39;)
+  })
+})</code></pre>
+<p align="center">Snippet: Using msw instead of mocking axios.</p><p>You can have even less boilerplate by setting up the server in another file and importing it automatically, as suggested <a href="https://mswjs.io/docs/getting-started/integrate/node">in the documentation</a>: <a href="https://mswjs.io/docs/getting-started/integrate/node">https://mswjs.io/docs/getting-started/integrate/node</a>. Then you won’t need to copy this code into all your tests - you just test as if you are in production with a real server that responds how you expect it to.</p>
+<p>One thing we are not doing in this test that we were doing previously is asserting the expected payload is sent to the server. If you want to do that, you can just keep track of the posted data with an array, for example:</p>
+<pre><code class="js lang-js language-js">const postedData = []
+const server = setupServer(
+  rest.post(&#39;/login&#39;, (req, res, ctx) =&gt; {
+    postedData.push(req.body)
+    return res(
+      ctx.json({
+        name: &#39;Lachlan&#39;
+      })
+    )
+  })
+)</code></pre>
+<p align="center">Snippet: Keeping track of posted data.</p><p>Now you can just assert that <code class="inline">postedData[0]</code> contains the expected payload. You could reset it in the <code class="inline">beforeEach</code> hook, if testing the body of the post request is something that is valuable to you.</p>
+<p><code class="inline">msw</code> can do a lot of other things, like respond with specific HTTP codes, so you can easily simulated a failed request, too. This is where <code class="inline">msw</code> really shines compared to the using <code class="inline">jest.mock</code> to mock <code class="inline">axios</code>. Let’s add another test for this exact case:</p>
+<pre><code class="js lang-js language-js">describe(&#39;login&#39;, () =&gt; {
+  beforeAll(() =&gt; server.listen())
+  afterAll(() =&gt; server.close())
+
+  it(&#39;successfully authenticates&#39;, async () =&gt; {
+    // ...
+  })
+
+  it(&#39;handles incorrect credentials&#39;, async () =&gt; {
+    const error = &#39;Error: please check the details and try again&#39; 
+    server.use(
+      rest.post(&#39;/login&#39;, (req, res, ctx) =&gt; {
+        return res(
+          ctx.status(403),
+          ctx.json({ error })
+        )
+      })
+    )
+
+    render(App, { store })
+    await fireEvent.update(
+      screen.getByRole(&#39;username&#39;), &#39;Lachlan&#39;)
+    await fireEvent.update(
+      screen.getByRole(&#39;password&#39;), &#39;secret-password&#39;)
+    await fireEvent.click(screen.getByText(&#39;Click here to sign in&#39;))
+
+    await screen.findByText(error)
+  })
+})</code></pre>
+<p align="center">Snippet: A test for a failed request.</p><p>It’s easy to extend the mock server on a test by test basis. Writing these two tests using <code class="inline">jest.mock</code> to mock <code class="inline">axios</code> would be very messy!</p>
+<p>Another very cool feature about <code class="inline">msw</code> is you can use it in a browser during development. It isn’t showcased here, but a good exercise would be to try it out and experiment. Can you use the same endpoint handlers for both tests and development?</p>
+<h2>Conclusion</h2>
+<p>This chapter introduces various strategies for testing HTTP requests in your components. We saw the advantage of mocking <code class="inline">axios</code> and using a real Vuex store, as opposed to mocking the Vuex store. We then moved one layer lower, mocking the actual server with <code class="inline">msw</code>. This can be generalized - the lower the mock in the dependency chain, the more confidence you can be in your test suite.</p>
+<p>Tests <code class="inline">msw</code> is not enough - you still need to test your application against a real server to verify everything is working as expected. Tests like the ones described in this chapter are still very useful - they run fast and are very easy to write. I tend to use testing-library and <code class="inline">msw</code> as a development tool - it’s definitely faster than opening a browser and refreshing the page every time you make a change to your code.</p>
+<h2>Exercises</h2>
+<ul>
+<li>Trying using <code class="inline">msw</code> in a browser. You can use the same mock endpoint handlers for both your tests and development.
+</li>
+<li>Explore <code class="inline">msw</code> more and see what other interesting features it offers.
+\pagebreak
+</li>
+</ul>
+
+  </div>
+  <script src="prism.js"></script>
+  <script src="show.js"></script>
+  <script src="prism-highlight.js"></script>
+</body>
+</html>
